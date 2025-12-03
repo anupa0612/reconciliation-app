@@ -488,6 +488,15 @@ def start_reconciliation(id):
     flash(f'Started working on "{rec.name}"!', 'success')
     return redirect(request.referrer or url_for('list_reconciliations'))
 
+@app.route('/reconciliations/status/<int:id>/<status>')
+@login_required
+def update_rec_status(id, status):
+    rec = Reconciliation.query.get_or_404(id)
+    rec.status = status
+    db.session.commit()
+    flash(f'Reconciliation "{rec.name}" status updated to {status}!', 'success')
+    return redirect(url_for('list_reconciliations'))
+
 @app.route('/reconciliations/reset/<int:id>')
 @admin_required
 def reset_reconciliation(id):
