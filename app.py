@@ -29,8 +29,9 @@ else:
     if database_url:
         # Railway uses postgres://, SQLAlchemy needs postgresql://
         if database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
-        print(f"\n[DATABASE] Using cloud PostgreSQL database")
+            database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+        elif database_url.startswith('postgresql://'):
+            database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
     else:
         # Local development: use SQLite
         db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reconciliation.db')
