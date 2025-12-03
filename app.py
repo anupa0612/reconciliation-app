@@ -27,11 +27,13 @@ else:
     # Check for Railway/Cloud DATABASE_URL first, otherwise use local SQLite
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
-        # Railway uses postgres://, SQLAlchemy needs postgresql://
+        # Railway uses postgres://, SQLAlchemy needs postgresql+psycopg://
         if database_url.startswith('postgres://'):
             database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
         elif database_url.startswith('postgresql://'):
             database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+        db_path = "Cloud PostgreSQL Database"
+        print(f"\n[DATABASE] Using cloud PostgreSQL database")
     else:
         # Local development: use SQLite
         db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reconciliation.db')
@@ -546,22 +548,16 @@ def init_db():
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
+            print("\n" + "="*50)
+            print("DEFAULT ADMIN ACCOUNT CREATED")
+            print("="*50)
+            print("Username: admin")
+            print("Password: admin123")
+            print("PLEASE CHANGE THIS PASSWORD AFTER FIRST LOGIN!")
+            print("="*50 + "\n")
 
-# Initialize database when app loads
-    with app.app_context():
-        db.create_all()
-        if User.query.count() == 0:
-            admin = User(username='admin', name='Administrator', role='admin')
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-                print("\n" + "="*50)
-                print("DEFAULT ADMIN ACCOUNT CREATED")
-                print("="*50)
-                print("Username: admin")
-                print("Password: admin123")
-                print("PLEASE CHANGE THIS PASSWORD AFTER FIRST LOGIN!")
-                print("="*50 + "\n")
+# Initialize database when app is imported (for gunicorn/production)
+init_db()
 
 if __name__ == '__main__':
     init_db()
