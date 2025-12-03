@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Team Member - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-person-gear"></i> Edit Team Member</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card form-card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Full Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ member.name }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address *</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ member.email }}" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="role" class="form-label">Role / Position *</label>
+                        <input type="text" class="form-control" id="role" name="role" value="{{ member.role }}" required>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Save Changes
+                        </button>
+                        <a href="{{ url_for('list_members') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-lg"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card form-card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Member Info</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Joined:</strong> {{ member.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>Total Reconciliations:</strong> {{ member.reconciliations | length }}</p>
+                <p><strong>Active Reconciliations:</strong> {{ member.reconciliations | selectattr('status', 'ne', 'Completed') | list | length }}</p>
+                
+                <hr>
+                
+                <a href="{{ url_for('list_reconciliations') }}?member={{ member.id }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-list-check"></i> View All Reconciliations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

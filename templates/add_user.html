@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Add User - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-person-plus"></i> Add New User</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card form-card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Full Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" required placeholder="Enter full name">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username *</label>
+                        <input type="text" class="form-control" id="username" name="username" required placeholder="Enter username (for login)">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password *</label>
+                        <input type="password" class="form-control" id="password" name="password" required placeholder="Enter password">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="role" class="form-label">Role *</label>
+                        <select class="form-select" id="role" name="role" required>
+                            <option value="user">User (View & Complete only)</option>
+                            <option value="admin">Admin (Full access)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Create User
+                        </button>
+                        <a href="{{ url_for('list_users') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-lg"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card form-card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Role Permissions</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="text-danger"><i class="bi bi-shield-fill"></i> Admin</h6>
+                <ul class="small mb-3">
+                    <li>Add, edit, delete reconciliations</li>
+                    <li>Add, edit, delete team members</li>
+                    <li>Manage user accounts</li>
+                    <li>Reset reconciliations for next cycle</li>
+                    <li>View and complete reconciliations</li>
+                </ul>
+                
+                <h6 class="text-secondary"><i class="bi bi-person-fill"></i> User</h6>
+                <ul class="small mb-0">
+                    <li>View all reconciliations</li>
+                    <li>Mark reconciliations as complete</li>
+                    <li>Start working on reconciliations</li>
+                    <li>View team members</li>
+                    <li><span class="text-danger">Cannot</span> add/edit/delete anything</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
