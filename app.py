@@ -548,20 +548,20 @@ def init_db():
             db.session.commit()
 
 # Initialize database when app loads
-with app.app_context():
-    db.create_all()
-    if User.query.count() == 0:
-        admin = User(username='admin', name='Administrator', role='admin')
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-            print("\n" + "="*50)
-            print("DEFAULT ADMIN ACCOUNT CREATED")
-            print("="*50)
-            print("Username: admin")
-            print("Password: admin123")
-            print("PLEASE CHANGE THIS PASSWORD AFTER FIRST LOGIN!")
-            print("="*50 + "\n")
+    with app.app_context():
+        db.create_all()
+        if User.query.count() == 0:
+            admin = User(username='admin', name='Administrator', role='admin')
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+                print("\n" + "="*50)
+                print("DEFAULT ADMIN ACCOUNT CREATED")
+                print("="*50)
+                print("Username: admin")
+                print("Password: admin123")
+                print("PLEASE CHANGE THIS PASSWORD AFTER FIRST LOGIN!")
+                print("="*50 + "\n")
 
 if __name__ == '__main__':
     init_db()
