@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ rec.name }} - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-eye"></i> View Reconciliation</h1>
+    <div>
+        {% if rec.status != 'Completed' %}
+        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success">
+            <i class="bi bi-check-lg"></i> Complete
+        </a>
+        {% endif %}
+        {% if current_user and current_user.is_admin() %}
+        <a href="{{ url_for('edit_reconciliation', id=rec.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card form-card mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ rec.name }}</h5>
+                <span class="badge badge-frequency-{{ rec.frequency }}">{{ rec.frequency }}</span>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td width="180"><strong>Description:</strong></td>
+                        <td>{{ rec.description or 'No description' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Source System:</strong></td>
+                        <td>{{ rec.source_system or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Target System:</strong></td>
+                        <td>{{ rec.target_system or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Assigned To:</strong></td>
+                        <td>{{ rec.assignee.name if rec.assignee else 'Unassigned' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Priority:</strong></td>
+                        <td><span class="badge badge-priority-{{ rec.priority }}">{{ rec.priority }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td><span class="badge badge-status-{{ rec.status.replace(' ', '-') }}">{{ rec.status }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Due Date:</strong></td>
+                        <td>{{ rec.due_date.strftime('%Y-%m-%d') if rec.due_date else 'Not set' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Created:</strong></td>
+                        <td>{{ rec.created_at|local_time }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        {% if rec.status == 'Completed' %}
+        <div class="card form-card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-check-circle text-success"></i> Last Completion Details</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td width="180"><strong>Completed At:</strong></td>
+                        <td>{{ rec.last_completed|local_time if rec.last_completed else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Completed By:</strong></td>
+                        <td>{{ rec.completed_by or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Items Reconciled:</strong></td>
+                        <td>{{ rec.items_reconciled }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Exceptions Found:</strong></td>
+                        <td>
+                            {% if rec.exceptions_found > 0 %}
+                            <span class="badge bg-danger">{{ rec.exceptions_found }}</span>
+                            {% else %}
+                            <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Notes:</strong></td>
+                        <td>{{ rec.completion_notes or 'No notes' }}</td>
+                    </tr>
+                    {% if rec.next_due %}
+                    <tr>
+                        <td><strong>Next Due:</strong></td>
+                        <td>{{ rec.next_due.strftime('%Y-%m-%d') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card form-card mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                {% if rec.status == 'Pending' %}
+                <a href="{{ url_for('start_reconciliation', id=rec.id) }}" class="btn btn-primary">
+                    <i class="bi bi-play-circle"></i> Start Working
+                </a>
+                {% endif %}
+                
+                {% if rec.status != 'Completed' %}
+                <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success">
+                    <i class="bi bi-check-circle"></i> Mark Complete
+                </a>
+                {% endif %}
+                
+                {% if current_user and current_user.is_admin() %}
+                <hr>
+                {% if rec.status == 'Completed' %}
+                <a href="{{ url_for('reset_reconciliation', id=rec.id) }}" class="btn btn-warning">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset for Next Cycle
+                </a>
+                {% endif %}
+                <a href="{{ url_for('edit_reconciliation', id=rec.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-pencil"></i> Edit Reconciliation
+                </a>
+                <a href="{{ url_for('delete_reconciliation', id=rec.id) }}" class="btn btn-outline-danger" onclick="return confirm('Delete this reconciliation?')">
+                    <i class="bi bi-trash"></i> Delete
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        
+        <a href="{{ url_for('list_reconciliations') }}" class="btn btn-secondary w-100">
+            <i class="bi bi-arrow-left"></i> Back to List
+        </a>
+    </div>
+</div>
+{% endblock %}
