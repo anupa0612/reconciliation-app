@@ -36,7 +36,7 @@
                     <div class="row">
                         <div class="col-md-3 mb-3">
                             <label for="frequency" class="form-label">Frequency *</label>
-                            <select class="form-select" id="frequency" name="frequency" required>
+                            <select class="form-select" id="frequency" name="frequency" required onchange="updateDueFields()">
                                 <option value="Daily" {% if rec.frequency == 'Daily' %}selected{% endif %}>Daily</option>
                                 <option value="Weekly" {% if rec.frequency == 'Weekly' %}selected{% endif %}>Weekly</option>
                                 <option value="Monthly" {% if rec.frequency == 'Monthly' %}selected{% endif %}>Monthly</option>
@@ -76,10 +76,28 @@
                         </div>
                     </div>
                     
-                    <div class="mb-4">
-                        <label for="due_date" class="form-label">Due Date</label>
+                    <!-- Daily: Due Time -->
+                    <div class="mb-3" id="due_time_section" {% if rec.frequency != 'Daily' %}style="display: none;"{% endif %}>
+                        <label for="due_time" class="form-label">Due Time *</label>
+                        <input type="time" class="form-control" id="due_time" name="due_time" value="{{ rec.due_time or '17:00' }}">
+                        <small class="text-muted">Daily recs are due every working day at this time.</small>
+                    </div>
+                    
+                    <!-- Weekly: Auto-calculated (Friday) -->
+                    <div class="mb-3" id="weekly_info_section" {% if rec.frequency != 'Weekly' %}style="display: none;"{% endif %}>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-calendar-week"></i> <strong>Weekly Due Date:</strong> 
+                            Every Friday (last working day of the week)<br>
+                            <small>Current due: {{ rec.due_date.strftime('%A, %d %B %Y') if rec.due_date else 'Not set' }}</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Monthly: User enters due date -->
+                    <div class="mb-3" id="due_date_section" {% if rec.frequency != 'Monthly' %}style="display: none;"{% endif %}>
+                        <label for="due_date" class="form-label">Due Date *</label>
                         <input type="date" class="form-control" id="due_date" name="due_date" 
                                value="{{ rec.due_date.strftime('%Y-%m-%d') if rec.due_date else '' }}">
+                        <small class="text-muted">Select the monthly due date for this reconciliation.</small>
                     </div>
                     
                     <div class="d-flex gap-2">
@@ -105,17 +123,21 @@
             </div>
             <div class="card-body">
                 <p><small class="text-muted">Created</small><br>
-                {{ rec.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                {{ rec.created_at|local_time }}</p>
                 
                 <p><small class="text-muted">Frequency</small><br>
                 <span class="badge badge-frequency-{{ rec.frequency }}">{{ rec.frequency }}</span></p>
                 
                 <p><small class="text-muted">Current Status</small><br>
-                <span class="badge badge-status-{{ rec.status.replace(' ', '-') }}">{{ rec.status }}</span></p>
+                <span class="badge badge-status-{{ rec.status.replace(' ', '-') }}">{{ rec.status }}</span>
+                {% if rec.is_overdue() %}
+                <span class="badge bg-danger">OVERDUE</span>
+                {% endif %}
+                </p>
                 
                 {% if rec.last_completed %}
                 <p><small class="text-muted">Last Completed</small><br>
-                {{ rec.last_completed.strftime('%Y-%m-%d %H:%M') }}</p>
+                {{ rec.last_completed|local_time }}</p>
                 {% endif %}
                 
                 {% if rec.next_due %}
@@ -154,6 +176,12 @@
                 </a>
                 {% endif %}
                 
+                {% if rec.is_overdue() and rec.assignee %}
+                <a href="{{ url_for('send_notification', id=rec.id) }}" class="btn btn-danger">
+                    <i class="bi bi-envelope"></i> Send Overdue Notification
+                </a>
+                {% endif %}
+                
                 {% if rec.status not in ['Completed', 'On Hold'] %}
                 <a href="{{ url_for('update_rec_status', id=rec.id, status='On Hold') }}" class="btn btn-outline-warning">
                     <i class="bi bi-pause-circle"></i> Put On Hold
@@ -163,4 +191,27 @@
         </div>
     </div>
 </div>
+
+<script>
+function updateDueFields() {
+    const frequency = document.getElementById('frequency').value;
+    const dueTimeSection = document.getElementById('due_time_section');
+    const weeklyInfoSection = document.getElementById('weekly_info_section');
+    const dueDateSection = document.getElementById('due_date_section');
+    
+    // Hide all sections first
+    dueTimeSection.style.display = 'none';
+    weeklyInfoSection.style.display = 'none';
+    dueDateSection.style.display = 'none';
+    
+    // Show relevant section based on frequency
+    if (frequency === 'Daily') {
+        dueTimeSection.style.display = 'block';
+    } else if (frequency === 'Weekly') {
+        weeklyInfoSection.style.display = 'block';
+    } else if (frequency === 'Monthly') {
+        dueDateSection.style.display = 'block';
+    }
+}
+</script>
 {% endblock %}

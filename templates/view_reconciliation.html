@@ -58,7 +58,7 @@
                     </tr>
                     <tr>
                         <td><strong>Created:</strong></td>
-                        <td>{{ rec.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ rec.created_at|local_time }}</td>
                     </tr>
                 </table>
             </div>
@@ -73,7 +73,7 @@
                 <table class="table table-borderless">
                     <tr>
                         <td width="180"><strong>Completed At:</strong></td>
-                        <td>{{ rec.last_completed.strftime('%Y-%m-%d %H:%M') if rec.last_completed else '-' }}</td>
+                        <td>{{ rec.last_completed|local_time if rec.last_completed else '-' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Completed By:</strong></td>

@@ -46,7 +46,7 @@
                 <h5 class="mb-0"><i class="bi bi-info-circle"></i> Member Info</h5>
             </div>
             <div class="card-body">
-                <p><strong>Joined:</strong> {{ member.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>Joined:</strong> {{ member.created_at|local_time }}</p>
                 <p><strong>Total Reconciliations:</strong> {{ member.reconciliations | length }}</p>
                 <p><strong>Active Reconciliations:</strong> {{ member.reconciliations | selectattr('status', 'ne', 'Completed') | list | length }}</p>
                 

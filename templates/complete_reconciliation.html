@@ -76,7 +76,7 @@
                 {% if rec.last_completed %}
                 <hr>
                 <p><small class="text-muted">Previous Completion</small><br>
-                {{ rec.last_completed.strftime('%Y-%m-%d %H:%M') }}</p>
+                {{ rec.last_completed|local_time }}</p>
                 
                 {% if rec.items_reconciled %}
                 <p><small class="text-muted">Previous Stats</small><br>

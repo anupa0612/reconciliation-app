@@ -56,7 +56,7 @@
             </div>
             <div class="card-body">
                 <p><strong>Username:</strong> {{ user.username }}</p>
-                <p><strong>Created:</strong> {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>Created:</strong> {{ user.created_at|local_time }}</p>
                 <p><strong>Current Role:</strong> 
                     <span class="badge {% if user.is_admin() %}role-badge-admin{% else %}role-badge-user{% endif %}">
                         {{ user.role | upper }}

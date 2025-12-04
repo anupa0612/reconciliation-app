@@ -36,7 +36,7 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="frequency" class="form-label">Frequency *</label>
-                            <select class="form-select" id="frequency" name="frequency" required>
+                            <select class="form-select" id="frequency" name="frequency" required onchange="updateDueFields()">
                                 <option value="Daily">Daily</option>
                                 <option value="Weekly">Weekly</option>
                                 <option value="Monthly">Monthly</option>
@@ -54,9 +54,9 @@
                         </div>
                         
                         <div class="col-md-4 mb-3">
-                            <label for="assigned_to" class="form-label">Assign To</label>
-                            <select class="form-select" id="assigned_to" name="assigned_to">
-                                <option value="">-- Unassigned --</option>
+                            <label for="assigned_to" class="form-label">Assign To *</label>
+                            <select class="form-select" id="assigned_to" name="assigned_to" required>
+                                <option value="">-- Select Team Member --</option>
                                 {% for member in members %}
                                 <option value="{{ member.id }}">{{ member.name }} ({{ member.role }})</option>
                                 {% endfor %}
@@ -64,9 +64,27 @@
                         </div>
                     </div>
                     
-                    <div class="mb-4">
-                        <label for="due_date" class="form-label">Initial Due Date</label>
+                    <!-- Daily: Due Time -->
+                    <div class="mb-3" id="due_time_section">
+                        <label for="due_time" class="form-label">Due Time *</label>
+                        <input type="time" class="form-control" id="due_time" name="due_time" value="17:00">
+                        <small class="text-muted">Daily recs are due every working day at this time.</small>
+                    </div>
+                    
+                    <!-- Weekly: Auto-calculated (Friday) -->
+                    <div class="mb-3" id="weekly_info_section" style="display: none;">
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-calendar-week"></i> <strong>Weekly Due Date:</strong> 
+                            Every Friday (last working day of the week)<br>
+                            <small>Next due: {{ next_friday.strftime('%A, %d %B %Y') if next_friday else 'Calculated automatically' }}</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Monthly: User enters due date -->
+                    <div class="mb-3" id="due_date_section" style="display: none;">
+                        <label for="due_date" class="form-label">Due Date *</label>
                         <input type="date" class="form-control" id="due_date" name="due_date">
+                        <small class="text-muted">Select the monthly due date for this reconciliation.</small>
                     </div>
                     
                     <div class="d-flex gap-2">
@@ -89,13 +107,27 @@
             </div>
             <div class="card-body">
                 <p><strong class="text-primary">Daily</strong><br>
-                <small class="text-muted">Every business day (Mon-Fri). Next due: next working day.</small></p>
+                <small class="text-muted">Every business day (Mon-Fri). You set the <strong>due time</strong> for completion.</small></p>
                 
                 <p><strong class="text-success">Weekly</strong><br>
-                <small class="text-muted">Once per week. Next due: <strong>Monday</strong> (1st working day of next week).</small></p>
+                <small class="text-muted">Due every <strong>Friday</strong> (last working day of the week). Auto-calculated.</small></p>
                 
                 <p><strong class="text-warning">Monthly</strong><br>
-                <small class="text-muted">Once per month. Next due: <strong>1st working day</strong> of next month.</small></p>
+                <small class="text-muted">You set the <strong>due date</strong> each month.</small></p>
+            </div>
+        </div>
+        
+        <div class="card form-card mt-3">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-bell"></i> Overdue Notifications</h5>
+            </div>
+            <div class="card-body">
+                <p><small class="text-muted">When a reconciliation becomes overdue:</small></p>
+                <ul class="small text-muted mb-0">
+                    <li>Email sent to assigned team member</li>
+                    <li>All admins copied on the email</li>
+                    <li>Only admin can mark overdue items complete</li>
+                </ul>
             </div>
         </div>
         
@@ -107,4 +139,38 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+function updateDueFields() {
+    const frequency = document.getElementById('frequency').value;
+    const dueTimeSection = document.getElementById('due_time_section');
+    const weeklyInfoSection = document.getElementById('weekly_info_section');
+    const dueDateSection = document.getElementById('due_date_section');
+    const dueTimeInput = document.getElementById('due_time');
+    const dueDateInput = document.getElementById('due_date');
+    
+    // Hide all sections first
+    dueTimeSection.style.display = 'none';
+    weeklyInfoSection.style.display = 'none';
+    dueDateSection.style.display = 'none';
+    
+    // Remove required from all
+    dueTimeInput.required = false;
+    dueDateInput.required = false;
+    
+    // Show relevant section based on frequency
+    if (frequency === 'Daily') {
+        dueTimeSection.style.display = 'block';
+        dueTimeInput.required = true;
+    } else if (frequency === 'Weekly') {
+        weeklyInfoSection.style.display = 'block';
+    } else if (frequency === 'Monthly') {
+        dueDateSection.style.display = 'block';
+        dueDateInput.required = true;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', updateDueFields);
+</script>
 {% endblock %}
