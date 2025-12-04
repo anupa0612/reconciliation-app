@@ -7,9 +7,22 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import os
 import sys
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# Sri Lanka timezone (UTC+5:30)
+SL_OFFSET = timedelta(hours=5, minutes=30)
+
+# Email Configuration (Outlook/Office 365)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.office365.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USER = os.environ.get('EMAIL_USER', '')  # Your Outlook email
+EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')  # Your Outlook password or app password
+EMAIL_FROM = os.environ.get('EMAIL_FROM', '')  # From email address
 
 # Handle PyInstaller bundling
 if getattr(sys, 'frozen', False):
@@ -45,6 +58,21 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# Template filter to convert UTC to Sri Lanka time
+@app.template_filter('local_time')
+def local_time_filter(utc_dt):
+    if utc_dt is None:
+        return ''
+    local_dt = utc_dt + SL_OFFSET
+    return local_dt.strftime('%Y-%m-%d %H:%M')
+
+@app.template_filter('local_date')
+def local_date_filter(utc_dt):
+    if utc_dt is None:
+        return ''
+    local_dt = utc_dt + SL_OFFSET
+    return local_dt.strftime('%Y-%m-%d')
 
 # ============== DATABASE MODELS ==============
 
@@ -83,6 +111,7 @@ class Reconciliation(db.Model):
     source_system = db.Column(db.String(100))
     target_system = db.Column(db.String(100))
     due_date = db.Column(db.Date)
+    due_time = db.Column(db.String(5), default='17:00')  # Format: HH:MM (24-hour) - for Daily only
     last_completed = db.Column(db.DateTime)
     next_due = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -91,6 +120,64 @@ class Reconciliation(db.Model):
     items_reconciled = db.Column(db.Integer, default=0)
     exceptions_found = db.Column(db.Integer, default=0)
     completed_by = db.Column(db.String(100))
+    overdue_notified = db.Column(db.Boolean, default=False)  # Track if overdue email was sent
+    
+    def is_overdue(self):
+        """Check if reconciliation is overdue based on date and time"""
+        if self.status == 'Completed' or not self.due_date:
+            return False
+        
+        today = date.today()
+        now = datetime.utcnow() + SL_OFFSET  # Current time in Sri Lanka
+        
+        if self.due_date < today:
+            return True
+        elif self.due_date == today:
+            # For Daily recs, check due time
+            if self.frequency == 'Daily' and self.due_time:
+                try:
+                    due_hour, due_min = map(int, self.due_time.split(':'))
+                    if now.hour > due_hour or (now.hour == due_hour and now.minute > due_min):
+                        return True
+                except:
+                    pass
+            # For Weekly/Monthly, overdue at end of day (11:59 PM)
+            elif self.frequency in ['Weekly', 'Monthly']:
+                if now.hour >= 23 and now.minute >= 59:
+                    return True
+        return False
+    
+    def is_due_today(self):
+        """Check if reconciliation is due today but not yet overdue"""
+        if self.status == 'Completed' or not self.due_date:
+            return False
+        return self.due_date == date.today() and not self.is_overdue()
+    
+    @staticmethod
+    def get_last_working_day_of_week(reference_date=None):
+        """Get last working day (Friday) of the current week"""
+        if reference_date is None:
+            reference_date = date.today()
+        # Find Friday of this week
+        days_until_friday = 4 - reference_date.weekday()
+        if days_until_friday < 0:
+            days_until_friday += 7
+        friday = reference_date + timedelta(days=days_until_friday)
+        return friday
+    
+    @staticmethod
+    def get_next_last_working_day_of_week():
+        """Get last working day (Friday) of next week"""
+        today = date.today()
+        # Find Friday of next week
+        days_until_friday = 4 - today.weekday()
+        if days_until_friday <= 0:
+            days_until_friday += 7
+        next_friday = today + timedelta(days=days_until_friday)
+        # If today is Friday or past Friday, go to next week's Friday
+        if today.weekday() >= 4:
+            next_friday += timedelta(days=7)
+        return next_friday
     
     def calculate_next_due(self):
         today = date.today()
@@ -101,12 +188,8 @@ class Reconciliation(db.Model):
                 next_day += timedelta(days=1)
             return next_day
         elif self.frequency == 'Weekly':
-            # 1st working day of next week (Monday)
-            days_until_monday = (7 - today.weekday()) % 7
-            if days_until_monday == 0:
-                days_until_monday = 7  # If today is Monday, go to next Monday
-            next_monday = today + timedelta(days=days_until_monday)
-            return next_monday
+            # Last working day of next week (Friday)
+            return self.get_next_last_working_day_of_week()
         elif self.frequency == 'Monthly':
             # 1st working day of next month
             month = today.month + 1
@@ -121,6 +204,99 @@ class Reconciliation(db.Model):
                 first_of_month += timedelta(days=1)
             return first_of_month
         return today
+
+# ============== EMAIL FUNCTIONS ==============
+
+def send_overdue_email(rec, assigned_member, admin_emails):
+    """Send overdue notification email via Outlook"""
+    if not EMAIL_USER or not EMAIL_PASSWORD:
+        print("[EMAIL] Email not configured. Skipping notification.")
+        return False
+    
+    try:
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_FROM or EMAIL_USER
+        msg['To'] = assigned_member.email
+        msg['Cc'] = ', '.join(admin_emails)
+        msg['Subject'] = f'OVERDUE: {rec.name} - Reconciliation Past Due'
+        
+        # Email body
+        body = f"""
+Dear {assigned_member.name},
+
+This is an automated notification to inform you that the following reconciliation is now OVERDUE:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RECONCILIATION DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Name: {rec.name}
+Frequency: {rec.frequency}
+Priority: {rec.priority}
+Due Date: {rec.due_date.strftime('%Y-%m-%d') if rec.due_date else 'Not set'}
+{f"Due Time: {rec.due_time}" if rec.frequency == 'Daily' and rec.due_time else ""}
+Source System: {rec.source_system or 'N/A'}
+Target System: {rec.target_system or 'N/A'}
+
+Status: OVERDUE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Please complete this reconciliation as soon as possible and contact your administrator.
+
+Note: Only an administrator can mark overdue items as completed.
+
+Best regards,
+ReconcileHub System
+
+---
+This is an automated message. Please do not reply directly to this email.
+"""
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Send email
+        all_recipients = [assigned_member.email] + admin_emails
+        
+        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_USER, all_recipients, msg.as_string())
+        server.quit()
+        
+        print(f"[EMAIL] Overdue notification sent for: {rec.name}")
+        return True
+        
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send email: {str(e)}")
+        return False
+
+def check_and_notify_overdue():
+    """Check for overdue items and send notifications"""
+    with app.app_context():
+        # Get all overdue reconciliations that haven't been notified
+        overdue_recs = Reconciliation.query.filter(
+            Reconciliation.status != 'Completed',
+            Reconciliation.overdue_notified == False
+        ).all()
+        
+        # Filter to actually overdue items
+        overdue_recs = [r for r in overdue_recs if r.is_overdue()]
+        
+        if not overdue_recs:
+            return
+        
+        # Get all admin emails
+        admins = User.query.filter_by(role='admin').all()
+        admin_emails = [a.username + '@' for a in admins if a.username]  # Modify as needed
+        
+        for rec in overdue_recs:
+            if rec.assignee and rec.assignee.email:
+                # Send notification
+                if send_overdue_email(rec, rec.assignee, admin_emails):
+                    rec.overdue_notified = True
+                    db.session.commit()
 
 # ============== ACCESS CONTROL ==============
 
@@ -404,14 +580,35 @@ def add_reconciliation():
         source_system = request.form.get('source_system', '')
         target_system = request.form.get('target_system', '')
         assigned_to = request.form.get('assigned_to')
-        due_date_str = request.form.get('due_date')
         
-        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
+        # Handle due date/time based on frequency
+        due_date = None
+        due_time = '17:00'  # Default
+        
+        if frequency == 'Daily':
+            # Auto-set due date to next working day, user provides due time
+            today = date.today()
+            due_date = today
+            if today.weekday() >= 5:  # Weekend
+                due_date = today + timedelta(days=(7 - today.weekday()))
+            due_time = request.form.get('due_time', '17:00')
+            
+        elif frequency == 'Weekly':
+            # Auto-set due date to last working day of week (Friday)
+            due_date = Reconciliation.get_last_working_day_of_week()
+            due_time = None  # Not used for weekly
+            
+        elif frequency == 'Monthly':
+            # User provides due date
+            due_date_str = request.form.get('due_date')
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
+            due_time = None  # Not used for monthly
         
         rec = Reconciliation(
             name=name, description=description, frequency=frequency,
             priority=priority, source_system=source_system, target_system=target_system,
-            assigned_to=int(assigned_to) if assigned_to else None, due_date=due_date
+            assigned_to=int(assigned_to) if assigned_to else None, 
+            due_date=due_date, due_time=due_time
         )
         db.session.add(rec)
         db.session.commit()
@@ -419,7 +616,9 @@ def add_reconciliation():
         return redirect(url_for('list_reconciliations'))
     
     members = TeamMember.query.all()
-    return render_template('add_reconciliation.html', members=members)
+    today = date.today()
+    next_friday = Reconciliation.get_last_working_day_of_week()
+    return render_template('add_reconciliation.html', members=members, today=today, next_friday=next_friday)
 
 @app.route('/reconciliations/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -428,6 +627,7 @@ def edit_reconciliation(id):
     if request.method == 'POST':
         rec.name = request.form['name']
         rec.description = request.form.get('description', '')
+        old_frequency = rec.frequency
         rec.frequency = request.form['frequency']
         rec.priority = request.form['priority']
         rec.status = request.form['status']
@@ -435,14 +635,34 @@ def edit_reconciliation(id):
         rec.target_system = request.form.get('target_system', '')
         assigned_to = request.form.get('assigned_to')
         rec.assigned_to = int(assigned_to) if assigned_to else None
-        due_date_str = request.form.get('due_date')
-        rec.due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
+        
+        # Handle due date/time based on frequency
+        if rec.frequency == 'Daily':
+            rec.due_time = request.form.get('due_time', '17:00')
+            # Only recalculate due date if frequency changed
+            if old_frequency != 'Daily':
+                today = date.today()
+                rec.due_date = today
+                if today.weekday() >= 5:
+                    rec.due_date = today + timedelta(days=(7 - today.weekday()))
+        elif rec.frequency == 'Weekly':
+            rec.due_time = None
+            # Only recalculate due date if frequency changed
+            if old_frequency != 'Weekly':
+                rec.due_date = Reconciliation.get_last_working_day_of_week()
+        elif rec.frequency == 'Monthly':
+            rec.due_time = None
+            due_date_str = request.form.get('due_date')
+            rec.due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
+        
         db.session.commit()
         flash(f'Reconciliation "{rec.name}" updated successfully!', 'success')
         return redirect(url_for('list_reconciliations'))
     
     members = TeamMember.query.all()
-    return render_template('edit_reconciliation.html', rec=rec, members=members)
+    today = date.today()
+    next_friday = Reconciliation.get_last_working_day_of_week()
+    return render_template('edit_reconciliation.html', rec=rec, members=members, today=today, next_friday=next_friday)
 
 @app.route('/reconciliations/delete/<int:id>')
 @admin_required
@@ -463,9 +683,14 @@ def view_reconciliation(id):
 @login_required
 def complete_reconciliation(id):
     rec = Reconciliation.query.get_or_404(id)
+    current_user = get_current_user()
+    
+    # If overdue, only admin can complete
+    if rec.is_overdue() and not current_user.is_admin():
+        flash('This reconciliation is overdue. Only an administrator can mark it as complete.', 'error')
+        return redirect(url_for('list_reconciliations'))
     
     if request.method == 'POST':
-        current_user = get_current_user()
         rec.status = 'Completed'
         rec.last_completed = datetime.utcnow()
         rec.items_reconciled = int(request.form.get('items_reconciled', 0))
@@ -473,6 +698,7 @@ def complete_reconciliation(id):
         rec.completion_notes = request.form.get('completion_notes', '')
         rec.completed_by = current_user.name if current_user else 'Unknown'
         rec.next_due = rec.calculate_next_due()
+        rec.overdue_notified = False  # Reset for next cycle
         db.session.commit()
         flash(f'Reconciliation "{rec.name}" marked as complete!', 'success')
         return redirect(url_for('list_reconciliations'))
@@ -507,9 +733,66 @@ def reset_reconciliation(id):
     rec.exceptions_found = 0
     rec.completion_notes = ''
     rec.completed_by = None
+    rec.overdue_notified = False  # Reset notification flag
     db.session.commit()
     flash(f'Reconciliation "{rec.name}" reset for next cycle!', 'success')
     return redirect(url_for('list_reconciliations'))
+
+@app.route('/reconciliations/notify/<int:id>')
+@admin_required
+def send_notification(id):
+    """Manually send overdue notification for a specific reconciliation"""
+    rec = Reconciliation.query.get_or_404(id)
+    
+    if not rec.is_overdue():
+        flash('This reconciliation is not overdue.', 'error')
+        return redirect(url_for('list_reconciliations'))
+    
+    if not rec.assignee:
+        flash('No team member assigned to this reconciliation.', 'error')
+        return redirect(url_for('list_reconciliations'))
+    
+    # Get admin emails
+    admins = User.query.filter_by(role='admin').all()
+    admin_emails = [a.username for a in admins if '@' in a.username]
+    
+    if send_overdue_email(rec, rec.assignee, admin_emails):
+        rec.overdue_notified = True
+        db.session.commit()
+        flash(f'Overdue notification sent for "{rec.name}"!', 'success')
+    else:
+        flash('Failed to send notification. Check email configuration.', 'error')
+    
+    return redirect(url_for('list_reconciliations'))
+
+@app.route('/api/check-overdue')
+def api_check_overdue():
+    """API endpoint to check and notify overdue items (can be called by scheduler)"""
+    # Get all overdue reconciliations that haven't been notified
+    all_recs = Reconciliation.query.filter(
+        Reconciliation.status != 'Completed',
+        Reconciliation.overdue_notified == False
+    ).all()
+    
+    # Filter to actually overdue items
+    overdue_recs = [r for r in all_recs if r.is_overdue()]
+    
+    if not overdue_recs:
+        return jsonify({'status': 'ok', 'message': 'No new overdue items', 'count': 0})
+    
+    # Get all admin emails
+    admins = User.query.filter_by(role='admin').all()
+    admin_emails = [a.username for a in admins if '@' in a.username]
+    
+    notified_count = 0
+    for rec in overdue_recs:
+        if rec.assignee and rec.assignee.email:
+            if send_overdue_email(rec, rec.assignee, admin_emails):
+                rec.overdue_notified = True
+                notified_count += 1
+    
+    db.session.commit()
+    return jsonify({'status': 'ok', 'message': f'Sent {notified_count} notifications', 'count': notified_count})
 
 # ============== FREQUENCY VIEWS ==============
 
