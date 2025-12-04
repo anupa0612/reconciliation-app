@@ -304,6 +304,40 @@ def get_user_notifications(user):
     
     return sorted(unique_notifs, key=lambda x: x.created_at, reverse=True)
 
+# ============== AUTO-RESET FUNCTIONS ==============
+
+def auto_reset_completed_reconciliations():
+    """
+    Automatically reset completed reconciliations when their next_due date arrives.
+    This makes items available again for the new cycle.
+    """
+    today = get_sl_today()
+    
+    # Find all completed reconciliations where next_due <= today
+    completed_recs = Reconciliation.query.filter(
+        Reconciliation.status == 'Completed',
+        Reconciliation.next_due <= today
+    ).all()
+    
+    reset_count = 0
+    for rec in completed_recs:
+        # Reset the reconciliation for new cycle
+        rec.status = 'Pending'
+        rec.due_date = rec.next_due  # Set due_date to the next_due
+        rec.next_due = rec.calculate_next_due()  # Calculate new next_due
+        rec.items_reconciled = 0
+        rec.exceptions_found = 0
+        rec.completion_notes = ''
+        rec.completed_by = None
+        rec.overdue_notified = False
+        reset_count += 1
+    
+    if reset_count > 0:
+        db.session.commit()
+        print(f"[AUTO-RESET] Reset {reset_count} reconciliation(s) for new cycle")
+    
+    return reset_count
+
 # ============== ACCESS CONTROL ==============
 
 def login_required(f):
@@ -449,6 +483,9 @@ def delete_user(id):
 @app.route('/')
 @login_required
 def dashboard():
+    # Auto-reset completed reconciliations that are due
+    auto_reset_completed_reconciliations()
+    
     today = get_sl_today()
     
     total_members = TeamMember.query.count()
@@ -551,6 +588,9 @@ def delete_member(id):
 @app.route('/reconciliations')
 @login_required
 def list_reconciliations():
+    # Auto-reset completed reconciliations that are due
+    auto_reset_completed_reconciliations()
+    
     status_filter = request.args.get('status', '')
     frequency_filter = request.args.get('frequency', '')
     priority_filter = request.args.get('priority', '')
@@ -766,8 +806,15 @@ def send_notification(id):
 @app.route('/api/check-overdue')
 def api_check_overdue():
     """API endpoint to check and create notifications for overdue items"""
-    count = check_and_create_overdue_notifications()
-    return jsonify({'status': 'ok', 'message': f'Created {count} notifications', 'count': count})
+    # Auto-reset completed reconciliations that are due
+    reset_count = auto_reset_completed_reconciliations()
+    notif_count = check_and_create_overdue_notifications()
+    return jsonify({
+        'status': 'ok', 
+        'message': f'Reset {reset_count} items, created {notif_count} notifications', 
+        'reset_count': reset_count,
+        'notification_count': notif_count
+    })
 
 @app.route('/api/notifications')
 @login_required
@@ -777,7 +824,8 @@ def api_get_notifications():
     if not user:
         return jsonify({'notifications': [], 'count': 0})
     
-    # Check and create any new overdue notifications first
+    # Auto-reset completed reconciliations and check for overdue
+    auto_reset_completed_reconciliations()
     check_and_create_overdue_notifications()
     
     notifications = get_user_notifications(user)
