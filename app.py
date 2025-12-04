@@ -91,22 +91,6 @@ class TeamMember(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reconciliations = db.relationship('Reconciliation', backref='assignee', lazy=True)
 
-class Notification(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    type = db.Column(db.String(20), default='warning')  # info, warning, danger, success
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # For specific user
-    for_admins = db.Column(db.Boolean, default=False)  # Show to all admins
-    for_member_id = db.Column(db.Integer, db.ForeignKey('team_member.id'), nullable=True)  # For team member
-    rec_id = db.Column(db.Integer, db.ForeignKey('reconciliation.id'), nullable=True)
-    is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    user = db.relationship('User', backref='notifications')
-    team_member = db.relationship('TeamMember', backref='notifications')
-    reconciliation = db.relationship('Reconciliation', backref='notifications')
-
 class Reconciliation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
@@ -210,6 +194,22 @@ class Reconciliation(db.Model):
                 first_of_month += timedelta(days=1)
             return first_of_month
         return today
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(20), default='warning')  # info, warning, danger, success
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # For specific user
+    for_admins = db.Column(db.Boolean, default=False)  # Show to all admins
+    for_member_id = db.Column(db.Integer, db.ForeignKey('team_member.id'), nullable=True)  # For team member
+    rec_id = db.Column(db.Integer, db.ForeignKey('reconciliation.id'), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='notifications')
+    team_member = db.relationship('TeamMember', backref='notifications')
+    reconciliation = db.relationship('Reconciliation', backref='notifications')
 
 # ============== NOTIFICATION FUNCTIONS ==============
 
