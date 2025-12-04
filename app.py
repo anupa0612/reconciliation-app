@@ -14,6 +14,14 @@ import sys
 # Sri Lanka timezone (UTC+5:30)
 SL_OFFSET = timedelta(hours=5, minutes=30)
 
+def get_sl_now():
+    """Get current datetime in Sri Lanka timezone"""
+    return datetime.utcnow() + SL_OFFSET
+
+def get_sl_today():
+    """Get current date in Sri Lanka timezone"""
+    return get_sl_now().date()
+
 # Handle PyInstaller bundling
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
@@ -113,41 +121,42 @@ class Reconciliation(db.Model):
     overdue_notified = db.Column(db.Boolean, default=False)  # Track if overdue email was sent
     
     def is_overdue(self):
-        """Check if reconciliation is overdue based on date and time"""
+        """Check if reconciliation is overdue based on date and time (Sri Lanka timezone)"""
         if self.status == 'Completed' or not self.due_date:
             return False
         
-        today = date.today()
-        now = datetime.utcnow() + SL_OFFSET  # Current time in Sri Lanka
+        # Get current date and time in Sri Lanka
+        now_sl = get_sl_now()
+        today_sl = get_sl_today()
         
-        if self.due_date < today:
+        if self.due_date < today_sl:
             return True
-        elif self.due_date == today:
+        elif self.due_date == today_sl:
             # For Daily recs, check due time
             if self.frequency == 'Daily' and self.due_time:
                 try:
                     due_hour, due_min = map(int, self.due_time.split(':'))
-                    if now.hour > due_hour or (now.hour == due_hour and now.minute > due_min):
+                    if now_sl.hour > due_hour or (now_sl.hour == due_hour and now_sl.minute > due_min):
                         return True
                 except:
                     pass
             # For Weekly/Monthly, overdue at end of day (11:59 PM)
             elif self.frequency in ['Weekly', 'Monthly']:
-                if now.hour >= 23 and now.minute >= 59:
+                if now_sl.hour >= 23 and now_sl.minute >= 59:
                     return True
         return False
     
     def is_due_today(self):
-        """Check if reconciliation is due today but not yet overdue"""
+        """Check if reconciliation is due today but not yet overdue (Sri Lanka timezone)"""
         if self.status == 'Completed' or not self.due_date:
             return False
-        return self.due_date == date.today() and not self.is_overdue()
+        return self.due_date == get_sl_today() and not self.is_overdue()
     
     @staticmethod
     def get_last_working_day_of_week(reference_date=None):
         """Get last working day (Friday) of the current week"""
         if reference_date is None:
-            reference_date = date.today()
+            reference_date = get_sl_today()
         # Find Friday of this week
         days_until_friday = 4 - reference_date.weekday()
         if days_until_friday < 0:
@@ -158,7 +167,7 @@ class Reconciliation(db.Model):
     @staticmethod
     def get_next_last_working_day_of_week():
         """Get last working day (Friday) of next week"""
-        today = date.today()
+        today = get_sl_today()
         # Find Friday of next week
         days_until_friday = 4 - today.weekday()
         if days_until_friday <= 0:
@@ -170,7 +179,7 @@ class Reconciliation(db.Model):
         return next_friday
     
     def calculate_next_due(self):
-        today = date.today()
+        today = get_sl_today()
         if self.frequency == 'Daily':
             # Next business day (skip weekends)
             next_day = today + timedelta(days=1)
@@ -440,7 +449,7 @@ def delete_user(id):
 @app.route('/')
 @login_required
 def dashboard():
-    today = date.today()
+    today = get_sl_today()
     
     total_members = TeamMember.query.count()
     total_recs = Reconciliation.query.count()
@@ -560,7 +569,7 @@ def list_reconciliations():
     
     recs = query.order_by(Reconciliation.due_date.asc()).all()
     members = TeamMember.query.all()
-    today = date.today()
+    today = get_sl_today()
     
     return render_template('reconciliations.html', recs=recs, members=members,
                          status_filter=status_filter, frequency_filter=frequency_filter,
@@ -584,7 +593,7 @@ def add_reconciliation():
         
         if frequency == 'Daily':
             # Auto-set due date to next working day, user provides due time
-            today = date.today()
+            today = get_sl_today()
             due_date = today
             if today.weekday() >= 5:  # Weekend
                 due_date = today + timedelta(days=(7 - today.weekday()))
@@ -613,7 +622,7 @@ def add_reconciliation():
         return redirect(url_for('list_reconciliations'))
     
     members = TeamMember.query.all()
-    today = date.today()
+    today = get_sl_today()
     next_friday = Reconciliation.get_last_working_day_of_week()
     return render_template('add_reconciliation.html', members=members, today=today, next_friday=next_friday)
 
@@ -638,7 +647,7 @@ def edit_reconciliation(id):
             rec.due_time = request.form.get('due_time', '17:00')
             # Only recalculate due date if frequency changed
             if old_frequency != 'Daily':
-                today = date.today()
+                today = get_sl_today()
                 rec.due_date = today
                 if today.weekday() >= 5:
                     rec.due_date = today + timedelta(days=(7 - today.weekday()))
@@ -657,7 +666,7 @@ def edit_reconciliation(id):
         return redirect(url_for('list_reconciliations'))
     
     members = TeamMember.query.all()
-    today = date.today()
+    today = get_sl_today()
     next_friday = Reconciliation.get_last_working_day_of_week()
     return render_template('edit_reconciliation.html', rec=rec, members=members, today=today, next_friday=next_friday)
 
@@ -826,7 +835,7 @@ def view_notifications():
 @app.route('/daily')
 @login_required
 def daily_view():
-    today = date.today()
+    today = get_sl_today()
     daily_recs = Reconciliation.query.filter_by(frequency='Daily').order_by(Reconciliation.status.asc()).all()
     members = TeamMember.query.all()
     return render_template('frequency_view.html', recs=daily_recs, members=members, today=today,
@@ -835,7 +844,7 @@ def daily_view():
 @app.route('/weekly')
 @login_required
 def weekly_view():
-    today = date.today()
+    today = get_sl_today()
     weekly_recs = Reconciliation.query.filter_by(frequency='Weekly').order_by(Reconciliation.due_date.asc()).all()
     members = TeamMember.query.all()
     return render_template('frequency_view.html', recs=weekly_recs, members=members, today=today,
@@ -844,7 +853,7 @@ def weekly_view():
 @app.route('/monthly')
 @login_required
 def monthly_view():
-    today = date.today()
+    today = get_sl_today()
     monthly_recs = Reconciliation.query.filter_by(frequency='Monthly').order_by(Reconciliation.due_date.asc()).all()
     members = TeamMember.query.all()
     return render_template('frequency_view.html', recs=monthly_recs, members=members, today=today,
