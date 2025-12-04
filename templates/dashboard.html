@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    {% if current_user and current_user.is_admin() %}
+    <a href="{{ url_for('add_reconciliation') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> New Reconciliation
+    </a>
+    {% endif %}
+</div>
+
+<!-- Frequency Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card daily">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3"><i class="bi bi-calendar-day"></i></div>
+                <div>
+                    <h3 class="mb-0">{{ daily_recs }}</h3>
+                    <small class="text-muted">Daily Recs</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card weekly">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3"><i class="bi bi-calendar-week"></i></div>
+                <div>
+                    <h3 class="mb-0">{{ weekly_recs }}</h3>
+                    <small class="text-muted">Weekly Recs</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card monthly">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3"><i class="bi bi-calendar-month"></i></div>
+                <div>
+                    <h3 class="mb-0">{{ monthly_recs }}</h3>
+                    <small class="text-muted">Monthly Recs</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card overdue">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3"><i class="bi bi-exclamation-triangle"></i></div>
+                <div>
+                    <h3 class="mb-0">{{ overdue | length }}</h3>
+                    <small class="text-muted">Overdue</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alerts -->
+{% if overdue %}
+<div class="alert alert-danger mb-4">
+    <h6 class="alert-heading mb-2"><i class="bi bi-exclamation-triangle"></i> Overdue Reconciliations</h6>
+    {% for rec in overdue %}
+    <div class="d-flex justify-content-between align-items-center mb-1">
+        <span>
+            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" class="alert-link">{{ rec.name }}</a>
+            <small>({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+        </span>
+        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-sm btn-success">Complete</a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if due_today %}
+<div class="alert alert-warning mb-4">
+    <h6 class="alert-heading mb-2"><i class="bi bi-clock"></i> Due Today</h6>
+    {% for rec in due_today %}
+    <div class="d-flex justify-content-between align-items-center mb-1">
+        <span>
+            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" class="alert-link">{{ rec.name }}</a>
+            <small>({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+        </span>
+        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-sm btn-success">Complete</a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Status Chart -->
+    <div class="col-md-4 mb-4">
+        <div class="card table-card h-100">
+            <div class="card-header bg-white border-0 pt-3 px-3">
+                <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Status Overview</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="statusChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Frequency Chart -->
+    <div class="col-md-4 mb-4">
+        <div class="card table-card h-100">
+            <div class="card-header bg-white border-0 pt-3 px-3">
+                <h6 class="mb-0"><i class="bi bi-bar-chart"></i> By Frequency</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="frequencyChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Team Workload -->
+    <div class="col-md-4 mb-4">
+        <div class="card table-card h-100">
+            <div class="card-header bg-white border-0 pt-3 px-3">
+                <h6 class="mb-0"><i class="bi bi-people"></i> Team Workload</h6>
+            </div>
+            <div class="card-body">
+                {% if workload %}
+                <ul class="list-group list-group-flush">
+                    {% for item in workload %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                        <div>
+                            <strong>{{ item.member.name }}</strong>
+                            <br><small class="text-muted">{{ item.member.role }}</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ item.active_recs }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <p class="mb-0">No team members</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Completions -->
+<div class="card table-card">
+    <div class="card-header bg-white border-0 pt-3 px-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-check-circle"></i> Recently Completed</h6>
+        <a href="{{ url_for('list_reconciliations') }}?status=Completed" class="btn btn-sm btn-outline-primary">View All</a>
+    </div>
+    <div class="card-body">
+        {% if recent_completed %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Reconciliation</th>
+                        <th>Frequency</th>
+                        <th>Completed By</th>
+                        <th>Items</th>
+                        <th>Exceptions</th>
+                        <th>When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in recent_completed %}
+                    <tr>
+                        <td><a href="{{ url_for('view_reconciliation', id=rec.id) }}">{{ rec.name }}</a></td>
+                        <td><span class="badge badge-frequency-{{ rec.frequency }}">{{ rec.frequency }}</span></td>
+                        <td>{{ rec.completed_by or rec.assignee.name if rec.assignee else '-' }}</td>
+                        <td>{{ rec.items_reconciled }}</td>
+                        <td>
+                            {% if rec.exceptions_found > 0 %}
+                            <span class="badge bg-danger">{{ rec.exceptions_found }}</span>
+                            {% else %}
+                            <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ rec.last_completed.strftime('%m-%d %H:%M') if rec.last_completed else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-3">
+            <p class="mb-0">No completed reconciliations yet</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+new Chart(document.getElementById('statusChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Pending', 'In Progress', 'Completed', 'On Hold'],
+        datasets: [{
+            data: [{{ pending_recs }}, {{ in_progress_recs }}, {{ completed_recs }}, {{ on_hold_recs }}],
+            backgroundColor: ['#6b7280', '#0ea5e9', '#10b981', '#f59e0b'],
+            borderWidth: 0
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 11 } } } } }
+});
+
+new Chart(document.getElementById('frequencyChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+        labels: ['Daily', 'Weekly', 'Monthly'],
+        datasets: [{
+            data: [{{ daily_recs }}, {{ weekly_recs }}, {{ monthly_recs }}],
+            backgroundColor: ['#2563eb', '#10b981', '#f59e0b'],
+            borderRadius: 6
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+});
+</script>
+{% endblock %}

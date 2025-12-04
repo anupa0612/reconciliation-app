@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Reconciliation Manager{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1d4ed8;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1e293b;
+        }
+        body { background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(180deg, var(--dark-color) 0%, #334155 100%);
+            padding: 20px 0;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 10px 20px;
+            margin: 2px 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .sidebar .nav-link i { margin-right: 8px; width: 18px; }
+        .sidebar .nav-section {
+            color: rgba(255,255,255,0.5);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 12px 20px 4px;
+            margin-top: 8px;
+        }
+        .brand-title {
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            padding: 8px 20px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .brand-title i { color: var(--success-color); }
+        .user-info {
+            padding: 12px 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: auto;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.85rem;
+        }
+        .user-info .badge { font-size: 0.7rem; }
+        .main-content { padding: 25px; }
+        .stat-card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card .card-body { padding: 18px; }
+        .stat-card .stat-icon {
+            width: 45px; height: 45px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        .stat-card.daily .stat-icon { background-color: rgba(37, 99, 235, 0.15); color: var(--primary-color); }
+        .stat-card.weekly .stat-icon { background-color: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+        .stat-card.monthly .stat-icon { background-color: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+        .stat-card.overdue .stat-icon { background-color: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
+        .table-card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
+        .btn-primary:hover { background-color: var(--secondary-color); border-color: var(--secondary-color); }
+        .badge-frequency-Daily { background-color: var(--primary-color); }
+        .badge-frequency-Weekly { background-color: var(--success-color); }
+        .badge-frequency-Monthly { background-color: var(--warning-color); }
+        .badge-priority-Low { background-color: #6b7280; }
+        .badge-priority-Medium { background-color: #3b82f6; }
+        .badge-priority-High { background-color: #f97316; }
+        .badge-priority-Critical { background-color: #dc2626; }
+        .badge-status-Pending { background-color: #6b7280; }
+        .badge-status-In-Progress { background-color: #0ea5e9; }
+        .badge-status-Completed { background-color: #10b981; }
+        .badge-status-On-Hold { background-color: #f59e0b; }
+        .page-header { margin-bottom: 20px; }
+        .page-header h1 { color: var(--dark-color); font-weight: 600; font-size: 1.6rem; }
+        .form-card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .alert { border-radius: 8px; border: none; }
+        .overdue-row { background-color: #fef2f2 !important; }
+        .due-today-row { background-color: #fffbeb !important; }
+        .table > tbody > tr > td { vertical-align: middle; }
+        .role-badge-admin { background-color: #dc2626; }
+        .role-badge-user { background-color: #6b7280; }
+        
+        /* Notification Styles */
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+            padding: 10px 20px;
+            margin: 2px 12px;
+            border-radius: 6px;
+            color: rgba(255,255,255,0.8);
+            transition: all 0.3s ease;
+        }
+        .notification-bell:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .notification-badge {
+            position: absolute;
+            top: 5px;
+            right: 15px;
+            background-color: var(--danger-color);
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 0.65rem;
+            font-weight: bold;
+            min-width: 18px;
+            text-align: center;
+        }
+        .notification-dropdown {
+            position: fixed;
+            top: 10px;
+            left: 220px;
+            width: 380px;
+            max-height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            z-index: 1050;
+            display: none;
+            overflow: hidden;
+        }
+        .notification-dropdown.show {
+            display: block;
+            animation: slideIn 0.2s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .notification-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, var(--dark-color) 0%, #334155 100%);
+            color: white;
+        }
+        .notification-header h6 { margin: 0; font-weight: 600; }
+        .notification-list {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+        .notification-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .notification-item:hover {
+            background-color: #f8fafc;
+        }
+        .notification-item.unread {
+            background-color: #eff6ff;
+            border-left: 3px solid var(--primary-color);
+        }
+        .notification-item.danger {
+            border-left: 3px solid var(--danger-color);
+        }
+        .notification-item .notif-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+        .notification-item .notif-message {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .notification-item .notif-time {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+        .notification-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: #94a3b8;
+        }
+        .notification-footer {
+            padding: 10px 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            background: #f8fafc;
+        }
+        
+        /* Toast Notification */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1100;
+        }
+        .toast-notification {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            max-width: 350px;
+            animation: toastSlideIn 0.3s ease;
+            border-left: 4px solid var(--danger-color);
+        }
+        @keyframes toastSlideIn {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .toast-notification .toast-icon {
+            font-size: 1.5rem;
+            color: var(--danger-color);
+        }
+        .toast-notification .toast-content { flex: 1; }
+        .toast-notification .toast-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+        .toast-notification .toast-message {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        .toast-notification .toast-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar d-flex flex-column">
+                <div class="brand-title">
+                    <i class="bi bi-arrow-repeat"></i> ReconcileHub
+                </div>
+                <nav class="nav flex-column flex-grow-1">
+                    <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    
+                    <!-- Notification Bell -->
+                    {% if current_user %}
+                    <div class="notification-bell" id="notificationBell" onclick="toggleNotifications()">
+                        <i class="bi bi-bell"></i> Notifications
+                        <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="nav-section">Reconciliations</div>
+                    <a class="nav-link {% if request.endpoint == 'list_reconciliations' %}active{% endif %}" href="{{ url_for('list_reconciliations') }}">
+                        <i class="bi bi-list-check"></i> All Recs
+                    </a>
+                    <a class="nav-link {% if request.endpoint == 'daily_view' %}active{% endif %}" href="{{ url_for('daily_view') }}">
+                        <i class="bi bi-calendar-day"></i> Daily
+                    </a>
+                    <a class="nav-link {% if request.endpoint == 'weekly_view' %}active{% endif %}" href="{{ url_for('weekly_view') }}">
+                        <i class="bi bi-calendar-week"></i> Weekly
+                    </a>
+                    <a class="nav-link {% if request.endpoint == 'monthly_view' %}active{% endif %}" href="{{ url_for('monthly_view') }}">
+                        <i class="bi bi-calendar-month"></i> Monthly
+                    </a>
+                    
+                    <div class="nav-section">Team</div>
+                    <a class="nav-link {% if 'member' in request.endpoint %}active{% endif %}" href="{{ url_for('list_members') }}">
+                        <i class="bi bi-people"></i> Team Members
+                    </a>
+                    
+                    {% if current_user and current_user.is_admin() %}
+                    <div class="nav-section">Admin</div>
+                    <a class="nav-link {% if 'user' in request.endpoint %}active{% endif %}" href="{{ url_for('list_users') }}">
+                        <i class="bi bi-person-gear"></i> Manage Users
+                    </a>
+                    {% endif %}
+                    
+                    <div class="nav-section">System</div>
+                    <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                        <i class="bi bi-gear"></i> Settings
+                    </a>
+                </nav>
+                
+                <!-- User Info at Bottom -->
+                {% if current_user %}
+                <div class="user-info">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span><i class="bi bi-person-circle"></i> {{ current_user.name }}</span>
+                        <span class="badge {% if current_user.is_admin() %}role-badge-admin{% else %}role-badge-user{% endif %}">
+                            {{ current_user.role | upper }}
+                        </span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('change_password') }}" class="btn btn-sm btn-outline-light flex-grow-1">
+                            <i class="bi bi-key"></i>
+                        </a>
+                        <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light flex-grow-1">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Developer Credit -->
+                <div class="text-center py-2" style="border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); font-size: 0.7rem;">
+                    Developed by <strong style="color: rgba(255,255,255,0.8);">Anupa Wimalasiri</strong>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="col-md-10 main-content">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification Dropdown -->
+    <div class="notification-dropdown" id="notificationDropdown">
+        <div class="notification-header">
+            <h6><i class="bi bi-bell"></i> Notifications</h6>
+            <button class="btn btn-sm btn-outline-light" onclick="markAllRead()">Mark all read</button>
+        </div>
+        <div class="notification-list" id="notificationList">
+            <div class="notification-empty">
+                <i class="bi bi-bell-slash" style="font-size: 2rem;"></i>
+                <p>No new notifications</p>
+            </div>
+        </div>
+        <div class="notification-footer">
+            <a href="{{ url_for('view_notifications') }}" class="text-primary text-decoration-none">View All Notifications</a>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        let notificationsOpen = false;
+        let lastNotificationCount = 0;
+        let shownToasts = new Set();
+        
+        function toggleNotifications() {
+            const dropdown = document.getElementById('notificationDropdown');
+            notificationsOpen = !notificationsOpen;
+            
+            if (notificationsOpen) {
+                dropdown.classList.add('show');
+                fetchNotifications();
+            } else {
+                dropdown.classList.remove('show');
+            }
+        }
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const bell = document.getElementById('notificationBell');
+            const dropdown = document.getElementById('notificationDropdown');
+            
+            if (bell && dropdown && !bell.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('show');
+                notificationsOpen = false;
+            }
+        });
+        
+        function fetchNotifications() {
+            fetch('/api/notifications')
+                .then(response => response.json())
+                .then(data => {
+                    updateNotificationBadge(data.count);
+                    renderNotifications(data.notifications);
+                    
+                    // Show toast for new notifications
+                    if (data.count > lastNotificationCount) {
+                        data.notifications.forEach(notif => {
+                            if (!shownToasts.has(notif.id) && notif.type === 'danger') {
+                                showToast(notif);
+                                shownToasts.add(notif.id);
+                            }
+                        });
+                    }
+                    lastNotificationCount = data.count;
+                })
+                .catch(err => console.log('Error fetching notifications:', err));
+        }
+        
+        function updateNotificationBadge(count) {
+            const badge = document.getElementById('notificationCount');
+            if (badge) {
+                if (count > 0) {
+                    badge.textContent = count > 9 ? '9+' : count;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+        
+        function renderNotifications(notifications) {
+            const list = document.getElementById('notificationList');
+            if (!list) return;
+            
+            if (notifications.length === 0) {
+                list.innerHTML = `
+                    <div class="notification-empty">
+                        <i class="bi bi-bell-slash" style="font-size: 2rem;"></i>
+                        <p>No new notifications</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            list.innerHTML = notifications.map(notif => `
+                <div class="notification-item ${notif.is_read ? '' : 'unread'} ${notif.type}" 
+                     onclick="handleNotificationClick(${notif.id}, ${notif.rec_id})">
+                    <div class="notif-title">
+                        <i class="bi bi-exclamation-triangle-fill text-danger"></i> ${notif.title}
+                    </div>
+                    <div class="notif-message">${notif.message}</div>
+                    <div class="notif-time"><i class="bi bi-clock"></i> ${notif.created_at}</div>
+                </div>
+            `).join('');
+        }
+        
+        function handleNotificationClick(notifId, recId) {
+            // Mark as read
+            fetch(`/api/notifications/read/${notifId}`, { method: 'POST' })
+                .then(() => {
+                    if (recId) {
+                        window.location.href = `/reconciliations/view/${recId}`;
+                    } else {
+                        fetchNotifications();
+                    }
+                });
+        }
+        
+        function markAllRead() {
+            fetch('/api/notifications/read-all', { method: 'POST' })
+                .then(() => {
+                    fetchNotifications();
+                });
+        }
+        
+        function showToast(notif) {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.innerHTML = `
+                <div class="toast-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <div class="toast-content">
+                    <div class="toast-title">${notif.title}</div>
+                    <div class="toast-message">${notif.message}</div>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            container.appendChild(toast);
+            
+            // Auto remove after 10 seconds
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 10000);
+        }
+        
+        // Check for notifications every 30 seconds
+        {% if current_user %}
+        setInterval(fetchNotifications, 30000);
+        
+        // Initial fetch
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchNotifications();
+        });
+        {% endif %}
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>
