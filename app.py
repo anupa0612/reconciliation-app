@@ -10,19 +10,9 @@ from functools import wraps
 from datetime import datetime, date, timedelta, timezone
 import os
 import sys
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # Sri Lanka timezone (UTC+5:30)
 SL_OFFSET = timedelta(hours=5, minutes=30)
-
-# Email Configuration (Outlook/Office 365)
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.office365.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-EMAIL_USER = os.environ.get('EMAIL_USER', '')  # Your Outlook email
-EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')  # Your Outlook password or app password
-EMAIL_FROM = os.environ.get('EMAIL_FROM', '')  # From email address
 
 # Handle PyInstaller bundling
 if getattr(sys, 'frozen', False):
@@ -100,6 +90,22 @@ class TeamMember(db.Model):
     role = db.Column(db.String(50), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reconciliations = db.relationship('Reconciliation', backref='assignee', lazy=True)
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(20), default='warning')  # info, warning, danger, success
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # For specific user
+    for_admins = db.Column(db.Boolean, default=False)  # Show to all admins
+    for_member_id = db.Column(db.Integer, db.ForeignKey('team_member.id'), nullable=True)  # For team member
+    rec_id = db.Column(db.Integer, db.ForeignKey('reconciliation.id'), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='notifications')
+    team_member = db.relationship('TeamMember', backref='notifications')
+    reconciliation = db.relationship('Reconciliation', backref='notifications')
 
 class Reconciliation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -205,98 +211,89 @@ class Reconciliation(db.Model):
             return first_of_month
         return today
 
-# ============== EMAIL FUNCTIONS ==============
+# ============== NOTIFICATION FUNCTIONS ==============
 
-def send_overdue_email(rec, assigned_member, admin_emails):
-    """Send overdue notification email via Outlook"""
-    if not EMAIL_USER or not EMAIL_PASSWORD:
-        print("[EMAIL] Email not configured. Skipping notification.")
+def create_overdue_notification(rec):
+    """Create overdue notification for assigned member and all admins"""
+    # Check if notification already exists for this rec
+    existing = Notification.query.filter_by(rec_id=rec.id, type='danger', is_read=False).first()
+    if existing:
         return False
     
-    try:
-        # Create message
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_FROM or EMAIL_USER
-        msg['To'] = assigned_member.email
-        msg['Cc'] = ', '.join(admin_emails)
-        msg['Subject'] = f'OVERDUE: {rec.name} - Reconciliation Past Due'
-        
-        # Email body
-        body = f"""
-Dear {assigned_member.name},
+    due_info = f"Due: {rec.due_date.strftime('%Y-%m-%d')}"
+    if rec.frequency == 'Daily' and rec.due_time:
+        due_info += f" at {rec.due_time}"
+    
+    # Create notification for admins
+    admin_notif = Notification(
+        title=f"OVERDUE: {rec.name}",
+        message=f"{rec.name} ({rec.frequency}) is overdue! {due_info}. Assigned to: {rec.assignee.name if rec.assignee else 'Unassigned'}",
+        type='danger',
+        for_admins=True,
+        rec_id=rec.id
+    )
+    db.session.add(admin_notif)
+    
+    # Create notification for assigned team member (linked to user if exists)
+    if rec.assignee:
+        member_notif = Notification(
+            title=f"OVERDUE: {rec.name}",
+            message=f"Your reconciliation '{rec.name}' is overdue! {due_info}. Please contact an admin to complete it.",
+            type='danger',
+            for_member_id=rec.assigned_to,
+            rec_id=rec.id
+        )
+        db.session.add(member_notif)
+    
+    db.session.commit()
+    return True
 
-This is an automated notification to inform you that the following reconciliation is now OVERDUE:
+def check_and_create_overdue_notifications():
+    """Check for overdue items and create notifications"""
+    # Get all overdue reconciliations that haven't been notified
+    overdue_recs = Reconciliation.query.filter(
+        Reconciliation.status != 'Completed',
+        Reconciliation.overdue_notified == False
+    ).all()
+    
+    # Filter to actually overdue items
+    overdue_recs = [r for r in overdue_recs if r.is_overdue()]
+    
+    for rec in overdue_recs:
+        if create_overdue_notification(rec):
+            rec.overdue_notified = True
+    
+    db.session.commit()
+    return len(overdue_recs)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RECONCILIATION DETAILS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Name: {rec.name}
-Frequency: {rec.frequency}
-Priority: {rec.priority}
-Due Date: {rec.due_date.strftime('%Y-%m-%d') if rec.due_date else 'Not set'}
-{f"Due Time: {rec.due_time}" if rec.frequency == 'Daily' and rec.due_time else ""}
-Source System: {rec.source_system or 'N/A'}
-Target System: {rec.target_system or 'N/A'}
-
-Status: OVERDUE
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Please complete this reconciliation as soon as possible and contact your administrator.
-
-Note: Only an administrator can mark overdue items as completed.
-
-Best regards,
-ReconcileHub System
-
----
-This is an automated message. Please do not reply directly to this email.
-"""
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Send email
-        all_recipients = [assigned_member.email] + admin_emails
-        
-        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        server.sendmail(EMAIL_USER, all_recipients, msg.as_string())
-        server.quit()
-        
-        print(f"[EMAIL] Overdue notification sent for: {rec.name}")
-        return True
-        
-    except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send email: {str(e)}")
-        return False
-
-def check_and_notify_overdue():
-    """Check for overdue items and send notifications"""
-    with app.app_context():
-        # Get all overdue reconciliations that haven't been notified
-        overdue_recs = Reconciliation.query.filter(
-            Reconciliation.status != 'Completed',
-            Reconciliation.overdue_notified == False
-        ).all()
-        
-        # Filter to actually overdue items
-        overdue_recs = [r for r in overdue_recs if r.is_overdue()]
-        
-        if not overdue_recs:
-            return
-        
-        # Get all admin emails
-        admins = User.query.filter_by(role='admin').all()
-        admin_emails = [a.username + '@' for a in admins if a.username]  # Modify as needed
-        
-        for rec in overdue_recs:
-            if rec.assignee and rec.assignee.email:
-                # Send notification
-                if send_overdue_email(rec, rec.assignee, admin_emails):
-                    rec.overdue_notified = True
-                    db.session.commit()
+def get_user_notifications(user):
+    """Get notifications for a specific user"""
+    notifications = []
+    
+    # If admin, get admin notifications
+    if user.is_admin():
+        admin_notifs = Notification.query.filter_by(for_admins=True, is_read=False).order_by(Notification.created_at.desc()).all()
+        notifications.extend(admin_notifs)
+    
+    # Get notifications for this user specifically
+    user_notifs = Notification.query.filter_by(user_id=user.id, is_read=False).order_by(Notification.created_at.desc()).all()
+    notifications.extend(user_notifs)
+    
+    # Get notifications for team member linked to this user (by name match)
+    member = TeamMember.query.filter_by(name=user.name).first()
+    if member:
+        member_notifs = Notification.query.filter_by(for_member_id=member.id, is_read=False).order_by(Notification.created_at.desc()).all()
+        notifications.extend(member_notifs)
+    
+    # Remove duplicates and sort
+    seen_ids = set()
+    unique_notifs = []
+    for n in notifications:
+        if n.id not in seen_ids:
+            seen_ids.add(n.id)
+            unique_notifs.append(n)
+    
+    return sorted(unique_notifs, key=lambda x: x.created_at, reverse=True)
 
 # ============== ACCESS CONTROL ==============
 
@@ -741,58 +738,88 @@ def reset_reconciliation(id):
 @app.route('/reconciliations/notify/<int:id>')
 @admin_required
 def send_notification(id):
-    """Manually send overdue notification for a specific reconciliation"""
+    """Manually create overdue notification for a specific reconciliation"""
     rec = Reconciliation.query.get_or_404(id)
     
     if not rec.is_overdue():
         flash('This reconciliation is not overdue.', 'error')
         return redirect(url_for('list_reconciliations'))
     
-    if not rec.assignee:
-        flash('No team member assigned to this reconciliation.', 'error')
-        return redirect(url_for('list_reconciliations'))
-    
-    # Get admin emails
-    admins = User.query.filter_by(role='admin').all()
-    admin_emails = [a.username for a in admins if '@' in a.username]
-    
-    if send_overdue_email(rec, rec.assignee, admin_emails):
+    if create_overdue_notification(rec):
         rec.overdue_notified = True
         db.session.commit()
-        flash(f'Overdue notification sent for "{rec.name}"!', 'success')
+        flash(f'Overdue notification created for "{rec.name}"!', 'success')
     else:
-        flash('Failed to send notification. Check email configuration.', 'error')
+        flash('Notification already exists for this item.', 'info')
     
     return redirect(url_for('list_reconciliations'))
 
 @app.route('/api/check-overdue')
 def api_check_overdue():
-    """API endpoint to check and notify overdue items (can be called by scheduler)"""
-    # Get all overdue reconciliations that haven't been notified
-    all_recs = Reconciliation.query.filter(
-        Reconciliation.status != 'Completed',
-        Reconciliation.overdue_notified == False
-    ).all()
+    """API endpoint to check and create notifications for overdue items"""
+    count = check_and_create_overdue_notifications()
+    return jsonify({'status': 'ok', 'message': f'Created {count} notifications', 'count': count})
+
+@app.route('/api/notifications')
+@login_required
+def api_get_notifications():
+    """Get notifications for current user"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'notifications': [], 'count': 0})
     
-    # Filter to actually overdue items
-    overdue_recs = [r for r in all_recs if r.is_overdue()]
+    # Check and create any new overdue notifications first
+    check_and_create_overdue_notifications()
     
-    if not overdue_recs:
-        return jsonify({'status': 'ok', 'message': 'No new overdue items', 'count': 0})
+    notifications = get_user_notifications(user)
     
-    # Get all admin emails
-    admins = User.query.filter_by(role='admin').all()
-    admin_emails = [a.username for a in admins if '@' in a.username]
+    notif_list = []
+    for n in notifications[:10]:  # Limit to 10 most recent
+        notif_list.append({
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'type': n.type,
+            'rec_id': n.rec_id,
+            'created_at': (n.created_at + SL_OFFSET).strftime('%Y-%m-%d %H:%M'),
+            'is_read': n.is_read
+        })
     
-    notified_count = 0
-    for rec in overdue_recs:
-        if rec.assignee and rec.assignee.email:
-            if send_overdue_email(rec, rec.assignee, admin_emails):
-                rec.overdue_notified = True
-                notified_count += 1
-    
+    return jsonify({
+        'notifications': notif_list,
+        'count': len(notifications)
+    })
+
+@app.route('/api/notifications/read/<int:id>', methods=['POST'])
+@login_required
+def api_mark_notification_read(id):
+    """Mark a notification as read"""
+    notif = Notification.query.get_or_404(id)
+    notif.is_read = True
     db.session.commit()
-    return jsonify({'status': 'ok', 'message': f'Sent {notified_count} notifications', 'count': notified_count})
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/notifications/read-all', methods=['POST'])
+@login_required
+def api_mark_all_read():
+    """Mark all notifications as read for current user"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'status': 'error'})
+    
+    notifications = get_user_notifications(user)
+    for n in notifications:
+        n.is_read = True
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+@app.route('/notifications')
+@login_required
+def view_notifications():
+    """View all notifications page"""
+    user = get_current_user()
+    notifications = get_user_notifications(user)
+    return render_template('notifications.html', notifications=notifications)
 
 # ============== FREQUENCY VIEWS ==============
 
