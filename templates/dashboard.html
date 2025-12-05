@@ -60,53 +60,73 @@
     </div>
 </div>
 
-<!-- Overdue Alert -->
+<!-- Overdue Alert - Collapsible (Expanded by default) -->
 {% if overdue %}
 <div class="card mb-4" style="border-left: 4px solid #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
-    <div class="card-body">
-        <h6 class="mb-3" style="color: #991b1b; font-weight: 700;">
+    <div class="card-header d-flex justify-content-between align-items-center py-3" 
+         style="background: transparent; border-bottom: 1px solid rgba(239,68,68,0.2); cursor: pointer;"
+         data-bs-toggle="collapse" data-bs-target="#overdueCollapse" aria-expanded="true">
+        <h6 class="mb-0" style="color: #991b1b; font-weight: 700;">
             <i class="bi bi-exclamation-triangle-fill me-2"></i>Overdue Reconciliations
+            <span class="badge bg-danger ms-2">{{ overdue | length }}</span>
         </h6>
-        <div class="row g-2">
-            {% for rec in overdue %}
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(239,68,68,0.2);">
-                    <div style="flex: 1; min-width: 0; margin-right: 12px;">
-                        <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #991b1b; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
-                        <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+        <button class="btn btn-sm btn-link p-0" style="color: #991b1b; text-decoration: none;">
+            <i class="bi bi-chevron-down collapse-icon" style="transition: transform 0.3s;"></i>
+        </button>
+    </div>
+    <div class="collapse show" id="overdueCollapse">
+        <div class="card-body pt-3">
+            <div class="row g-2">
+                {% for rec in overdue %}
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(239,68,68,0.2);">
+                        <div style="flex: 1; min-width: 0; margin-right: 12px;">
+                            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #991b1b; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
+                            <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+                        </div>
+                        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
+                            <i class="bi bi-check-lg me-1"></i>Complete
+                        </a>
                     </div>
-                    <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
-                        <i class="bi bi-check-lg me-1"></i>Complete
-                    </a>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
 </div>
 {% endif %}
 
-<!-- Due Today Alert -->
+<!-- Due Today Alert - Collapsible (Collapsed by default) -->
 {% if due_today %}
 <div class="card mb-4" style="border-left: 4px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);">
-    <div class="card-body">
-        <h6 class="mb-3" style="color: #92400e; font-weight: 700;">
+    <div class="card-header d-flex justify-content-between align-items-center py-3" 
+         style="background: transparent; border-bottom: 1px solid rgba(245,158,11,0.2); cursor: pointer;"
+         data-bs-toggle="collapse" data-bs-target="#dueTodayCollapse" aria-expanded="false">
+        <h6 class="mb-0" style="color: #92400e; font-weight: 700;">
             <i class="bi bi-clock-fill me-2"></i>Due Today
+            <span class="badge ms-2" style="background: #f59e0b; color: white;">{{ due_today | length }}</span>
         </h6>
-        <div class="row g-2">
-            {% for rec in due_today %}
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(245,158,11,0.2);">
-                    <div style="flex: 1; min-width: 0; margin-right: 12px;">
-                        <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #92400e; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
-                        <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+        <button class="btn btn-sm btn-link p-0" style="color: #92400e; text-decoration: none;">
+            <i class="bi bi-chevron-down collapse-icon" style="transition: transform 0.3s; transform: rotate(-90deg);"></i>
+        </button>
+    </div>
+    <div class="collapse" id="dueTodayCollapse">
+        <div class="card-body pt-3">
+            <div class="row g-2">
+                {% for rec in due_today %}
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(245,158,11,0.2);">
+                        <div style="flex: 1; min-width: 0; margin-right: 12px;">
+                            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #92400e; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
+                            <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+                        </div>
+                        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
+                            <i class="bi bi-check-lg me-1"></i>Complete
+                        </a>
                     </div>
-                    <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
-                        <i class="bi bi-check-lg me-1"></i>Complete
-                    </a>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
 </div>
@@ -217,6 +237,7 @@
 
 {% block scripts %}
 <script>
+// Chart.js - Status Chart
 new Chart(document.getElementById('statusChart').getContext('2d'), {
     type: 'doughnut',
     data: {
@@ -230,6 +251,7 @@ new Chart(document.getElementById('statusChart').getContext('2d'), {
     options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 11 } } } } }
 });
 
+// Chart.js - Frequency Chart
 new Chart(document.getElementById('frequencyChart').getContext('2d'), {
     type: 'bar',
     data: {
@@ -241,6 +263,21 @@ new Chart(document.getElementById('frequencyChart').getContext('2d'), {
         }]
     },
     options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+});
+
+// Collapse icon rotation
+document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(header) {
+    var target = document.querySelector(header.getAttribute('data-bs-target'));
+    var icon = header.querySelector('.collapse-icon');
+    
+    if (target && icon) {
+        target.addEventListener('show.bs.collapse', function() {
+            icon.style.transform = 'rotate(0deg)';
+        });
+        target.addEventListener('hide.bs.collapse', function() {
+            icon.style.transform = 'rotate(-90deg)';
+        });
+    }
 });
 </script>
 {% endblock %}
