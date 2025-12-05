@@ -60,34 +60,55 @@
     </div>
 </div>
 
-<!-- Alerts -->
+<!-- Overdue Alert -->
 {% if overdue %}
-<div class="alert alert-danger mb-4">
-    <h6 class="alert-heading mb-2"><i class="bi bi-exclamation-triangle"></i> Overdue Reconciliations</h6>
-    {% for rec in overdue %}
-    <div class="d-flex justify-content-between align-items-center mb-1">
-        <span>
-            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" class="alert-link">{{ rec.name }}</a>
-            <small>({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
-        </span>
-        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-sm btn-success">Complete</a>
+<div class="card mb-4" style="border-left: 4px solid #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
+    <div class="card-body">
+        <h6 class="mb-3" style="color: #991b1b; font-weight: 700;">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>Overdue Reconciliations
+        </h6>
+        <div class="row g-2">
+            {% for rec in overdue %}
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(239,68,68,0.2);">
+                    <div style="flex: 1; min-width: 0; margin-right: 12px;">
+                        <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #991b1b; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
+                        <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+                    </div>
+                    <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
+                        <i class="bi bi-check-lg me-1"></i>Complete
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-    {% endfor %}
 </div>
 {% endif %}
 
+<!-- Due Today Alert -->
 {% if due_today %}
-<div class="alert alert-warning mb-4">
-    <h6 class="alert-heading mb-2"><i class="bi bi-clock"></i> Due Today</h6>
-    {% for rec in due_today %}
-    <div class="d-flex justify-content-between align-items-center mb-1">
-        <span>
-            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" class="alert-link">{{ rec.name }}</a>
-            <small>({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
-        </span>
-        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-sm btn-success">Complete</a>
+<div class="card mb-4" style="border-left: 4px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);">
+    <div class="card-body">
+        <h6 class="mb-3" style="color: #92400e; font-weight: 700;">
+            <i class="bi bi-clock-fill me-2"></i>Due Today
+        </h6>
+        <div class="row g-2">
+            {% for rec in due_today %}
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(245,158,11,0.2);">
+                    <div style="flex: 1; min-width: 0; margin-right: 12px;">
+                        <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #92400e; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
+                        <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
+                    </div>
+                    <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
+                        <i class="bi bi-check-lg me-1"></i>Complete
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-    {% endfor %}
 </div>
 {% endif %}
 
