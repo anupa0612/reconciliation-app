@@ -161,6 +161,10 @@
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0); max-height: 200px; }
+            to { opacity: 0; transform: translateX(20px); max-height: 0; padding: 0; margin: 0; }
+        }
         .notification-header {
             padding: 15px 20px;
             border-bottom: 1px solid #eee;
@@ -260,7 +264,29 @@
             border: none;
             color: #94a3b8;
             cursor: pointer;
-            font-size: 1.2rem;
+            font-size: 1.5rem;
+            line-height: 1;
+            padding: 0;
+            margin: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        .toast-notification .toast-close:hover {
+            background-color: #f1f5f9;
+            color: #64748b;
+        }
+        .toast-notification .toast-close:active {
+            background-color: #e2e8f0;
+        }
+        @keyframes toastSlideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100px); }
         }
     </style>
 </head>
@@ -308,6 +334,9 @@
                     <div class="nav-section">Admin</div>
                     <a class="nav-link {% if 'user' in request.endpoint %}active{% endif %}" href="{{ url_for('list_users') }}">
                         <i class="bi bi-person-gear"></i> Manage Users
+                    </a>
+                    <a class="nav-link {% if request.endpoint == 'completion_history' %}active{% endif %}" href="{{ url_for('completion_history') }}">
+                        <i class="bi bi-clock-history"></i> History & Reports
                     </a>
                     {% endif %}
                     
@@ -460,15 +489,38 @@
             }
             
             list.innerHTML = notifications.map(notif => `
-                <div class="notification-item ${notif.is_read ? '' : 'unread'} ${notif.type}" 
-                     onclick="handleNotificationClick(${notif.id}, ${notif.rec_id})">
-                    <div class="notif-title">
-                        <i class="bi bi-exclamation-triangle-fill text-danger"></i> ${notif.title}
+                <div class="notification-item ${notif.is_read ? '' : 'unread'} ${notif.type}" id="notif-${notif.id}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1" onclick="handleNotificationClick(${notif.id}, ${notif.rec_id})" style="cursor: pointer;">
+                            <div class="notif-title">
+                                <i class="bi bi-exclamation-triangle-fill text-danger"></i> ${notif.title}
+                            </div>
+                            <div class="notif-message">${notif.message}</div>
+                            <div class="notif-time"><i class="bi bi-clock"></i> ${notif.created_at}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0 ms-2" onclick="dismissNotification(${notif.id}, event)" title="Dismiss">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
                     </div>
-                    <div class="notif-message">${notif.message}</div>
-                    <div class="notif-time"><i class="bi bi-clock"></i> ${notif.created_at}</div>
                 </div>
             `).join('');
+        }
+        
+        function dismissNotification(notifId, event) {
+            event.stopPropagation();
+            fetch(`/api/notifications/dismiss/${notifId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    const notifElement = document.getElementById(`notif-${notifId}`);
+                    if (notifElement) {
+                        notifElement.style.animation = 'slideOut 0.3s ease forwards';
+                        setTimeout(() => {
+                            notifElement.remove();
+                            fetchNotifications();
+                        }, 300);
+                    }
+                })
+                .catch(err => console.log('Error dismissing notification:', err));
         }
         
         function handleNotificationClick(notifId, recId) {
@@ -494,24 +546,44 @@
             const container = document.getElementById('toastContainer');
             if (!container) return;
             
+            const toastId = 'toast-' + notif.id;
             const toast = document.createElement('div');
             toast.className = 'toast-notification';
+            toast.id = toastId;
             toast.innerHTML = `
                 <div class="toast-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
                 <div class="toast-content">
                     <div class="toast-title">${notif.title}</div>
                     <div class="toast-message">${notif.message}</div>
                 </div>
-                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+                <button type="button" class="toast-close" aria-label="Close">&times;</button>
             `;
             container.appendChild(toast);
             
+            // Add click handler for close button
+            const closeBtn = toast.querySelector('.toast-close');
+            closeBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeToast(toastId);
+            });
+            
             // Auto remove after 10 seconds
             setTimeout(() => {
-                if (toast.parentElement) {
-                    toast.remove();
-                }
+                closeToast(toastId);
             }, 10000);
+        }
+        
+        function closeToast(toastId) {
+            const toast = document.getElementById(toastId);
+            if (toast) {
+                toast.style.animation = 'toastSlideOut 0.3s ease forwards';
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 300);
+            }
         }
         
         // Check for notifications every 30 seconds

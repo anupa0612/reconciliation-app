@@ -5,17 +5,23 @@
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
     <h1><i class="bi bi-bell"></i> All Notifications</h1>
-    <button class="btn btn-outline-secondary" onclick="markAllNotificationsRead()">
-        <i class="bi bi-check-all"></i> Mark All as Read
-    </button>
+    <div>
+        <button class="btn btn-outline-secondary me-2" onclick="markAllNotificationsRead()">
+            <i class="bi bi-check-all"></i> Mark All Read
+        </button>
+        <button class="btn btn-outline-danger" onclick="dismissAllNotifications()">
+            <i class="bi bi-trash"></i> Dismiss All
+        </button>
+    </div>
 </div>
 
 <div class="card form-card">
     <div class="card-body p-0">
         {% if notifications %}
-        <div class="list-group list-group-flush">
+        <div class="list-group list-group-flush" id="notificationsList">
             {% for notif in notifications %}
             <div class="list-group-item {% if not notif.is_read %}list-group-item-{{ 'danger' if notif.type == 'danger' else 'warning' if notif.type == 'warning' else 'info' }}{% endif %}" 
+                 id="notif-page-{{ notif.id }}"
                  style="border-left: 4px solid {% if notif.type == 'danger' %}#ef4444{% elif notif.type == 'warning' %}#f59e0b{% else %}#3b82f6{% endif %};">
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1">
@@ -37,7 +43,7 @@
                             <i class="bi bi-clock"></i> {{ notif.created_at|local_time }}
                         </small>
                     </div>
-                    <div class="ms-3">
+                    <div class="ms-3 d-flex flex-column gap-1">
                         {% if notif.rec_id %}
                         <a href="{{ url_for('view_reconciliation', id=notif.rec_id) }}" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-eye"></i> View
@@ -45,9 +51,12 @@
                         {% endif %}
                         {% if not notif.is_read %}
                         <button class="btn btn-sm btn-outline-secondary" onclick="markRead({{ notif.id }}, this)">
-                            <i class="bi bi-check"></i>
+                            <i class="bi bi-check"></i> Read
                         </button>
                         {% endif %}
+                        <button class="btn btn-sm btn-outline-danger" onclick="dismissNotif({{ notif.id }})">
+                            <i class="bi bi-x-lg"></i> Dismiss
+                        </button>
                     </div>
                 </div>
             </div>
@@ -67,8 +76,31 @@
 function markRead(notifId, btn) {
     fetch(`/api/notifications/read/${notifId}`, { method: 'POST' })
         .then(() => {
-            btn.closest('.list-group-item').classList.remove('list-group-item-danger', 'list-group-item-warning', 'list-group-item-info');
+            const item = btn.closest('.list-group-item');
+            item.classList.remove('list-group-item-danger', 'list-group-item-warning', 'list-group-item-info');
+            const badge = item.querySelector('.badge.bg-primary');
+            if (badge) badge.remove();
             btn.remove();
+        });
+}
+
+function dismissNotif(notifId) {
+    fetch(`/api/notifications/dismiss/${notifId}`, { method: 'POST' })
+        .then(() => {
+            const item = document.getElementById(`notif-page-${notifId}`);
+            if (item) {
+                item.style.transition = 'all 0.3s ease';
+                item.style.opacity = '0';
+                item.style.transform = 'translateX(20px)';
+                setTimeout(() => {
+                    item.remove();
+                    // Check if list is empty
+                    const list = document.getElementById('notificationsList');
+                    if (list && list.children.length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
         });
 }
 
@@ -77,6 +109,17 @@ function markAllNotificationsRead() {
         .then(() => {
             location.reload();
         });
+}
+
+function dismissAllNotifications() {
+    if (confirm('Are you sure you want to dismiss all notifications?')) {
+        const items = document.querySelectorAll('.list-group-item[id^="notif-page-"]');
+        items.forEach(item => {
+            const notifId = item.id.replace('notif-page-', '');
+            fetch(`/api/notifications/dismiss/${notifId}`, { method: 'POST' });
+        });
+        setTimeout(() => location.reload(), 500);
+    }
 }
 </script>
 {% endblock %}

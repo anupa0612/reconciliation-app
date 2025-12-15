@@ -107,6 +107,54 @@
             </div>
         </div>
         {% endif %}
+        
+        <!-- Completion History -->
+        {% if current_user and current_user.is_admin() and rec.completion_history %}
+        <div class="card form-card mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Completion History</h5>
+                <a href="{{ url_for('completion_history') }}?reconciliation={{ rec.id }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Completed By</th>
+                                <th>Items</th>
+                                <th>Exceptions</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in rec.completion_history[-5:]|reverse %}
+                            <tr class="{% if h.was_overdue %}table-danger{% endif %}">
+                                <td>{{ h.completed_at|local_time }}</td>
+                                <td>{{ h.completed_by or '-' }}</td>
+                                <td>{{ h.items_reconciled or 0 }}</td>
+                                <td>
+                                    {% if h.exceptions_found and h.exceptions_found > 0 %}
+                                    <span class="badge bg-danger">{{ h.exceptions_found }}</span>
+                                    {% else %}
+                                    <span class="badge bg-success">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if h.was_overdue %}
+                                    <span class="badge bg-danger">{{ h.days_overdue }}d late</span>
+                                    {% else %}
+                                    <span class="badge bg-success">On Time</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <div class="col-md-4">

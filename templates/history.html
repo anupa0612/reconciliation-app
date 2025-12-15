@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+
+{% block title %}Completion History - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h1><i class="bi bi-clock-history"></i> Completion History</h1>
+    <a href="{{ url_for('export_history', date_from=date_from, date_to=date_to, frequency=frequency_filter, member=member_filter, overdue_only='true' if overdue_only else '') }}" class="btn btn-success">
+        <i class="bi bi-file-earmark-excel"></i> Export to Excel
+    </a>
+</div>
+
+<!-- Summary Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3" style="background-color: rgba(99, 102, 241, 0.15); color: #6366f1;">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0">{{ total_completions }}</h3>
+                    <small class="text-muted">Total Completions</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3" style="background-color: rgba(239, 68, 68, 0.15); color: #ef4444;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0">{{ total_overdue }}</h3>
+                    <small class="text-muted">Completed Overdue</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3" style="background-color: rgba(16, 185, 129, 0.15); color: #10b981;">
+                    <i class="bi bi-list-check"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0">{{ total_items }}</h3>
+                    <small class="text-muted">Items Reconciled</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body d-flex align-items-center">
+                <div class="stat-icon me-3" style="background-color: rgba(245, 158, 11, 0.15); color: #f59e0b;">
+                    <i class="bi bi-bug"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0">{{ total_exceptions }}</h3>
+                    <small class="text-muted">Exceptions Found</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card form-card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">From Date</label>
+                <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">To Date</label>
+                <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Frequency</label>
+                <select name="frequency" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    <option value="Daily" {% if frequency_filter == 'Daily' %}selected{% endif %}>Daily</option>
+                    <option value="Weekly" {% if frequency_filter == 'Weekly' %}selected{% endif %}>Weekly</option>
+                    <option value="Monthly" {% if frequency_filter == 'Monthly' %}selected{% endif %}>Monthly</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Completed By</label>
+                <select name="member" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    {% for name in member_names %}
+                    <option value="{{ name }}" {% if member_filter == name %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="overdue_only" value="true" id="overdueOnly" {% if overdue_only %}checked{% endif %}>
+                    <label class="form-check-label" for="overdueOnly">Overdue Only</label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm me-1"><i class="bi bi-funnel"></i> Filter</button>
+                <a href="{{ url_for('completion_history') }}" class="btn btn-secondary btn-sm"><i class="bi bi-x-lg"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card table-card">
+    <div class="card-body">
+        {% if history %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Reconciliation</th>
+                        <th>Frequency</th>
+                        <th>Assigned To</th>
+                        <th>Completed By</th>
+                        <th>Due Date</th>
+                        <th>Completed</th>
+                        <th>Items</th>
+                        <th>Exceptions</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in history %}
+                    <tr class="{% if h.was_overdue %}overdue-row{% endif %}">
+                        <td>
+                            <strong>{{ h.reconciliation_name }}</strong>
+                            {% if h.source_system or h.target_system %}
+                            <br><small class="text-muted">{{ h.source_system or '?' }} → {{ h.target_system or '?' }}</small>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-frequency-{{ h.frequency }}">{{ h.frequency }}</span></td>
+                        <td>{{ h.assigned_to_name or '-' }}</td>
+                        <td>{{ h.completed_by or '-' }}</td>
+                        <td>{{ h.due_date.strftime('%Y-%m-%d') if h.due_date else '-' }}</td>
+                        <td>{{ h.completed_at|local_time if h.completed_at else '-' }}</td>
+                        <td>{{ h.items_reconciled or 0 }}</td>
+                        <td>
+                            {% if h.exceptions_found and h.exceptions_found > 0 %}
+                            <span class="badge bg-danger">{{ h.exceptions_found }}</span>
+                            {% else %}
+                            <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if h.was_overdue %}
+                            <span class="badge bg-danger" title="{{ h.days_overdue }} days overdue">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ h.days_overdue }}d late
+                            </span>
+                            {% else %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle-fill me-1"></i>On Time
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if h.completion_notes %}
+                    <tr class="{% if h.was_overdue %}overdue-row{% endif %}">
+                        <td colspan="9" class="ps-5">
+                            <small class="text-muted"><i class="bi bi-chat-left-text me-1"></i> {{ h.completion_notes }}</small>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-clock-history" style="font-size: 64px; color: #ccc;"></i>
+            <h4 class="mt-3 text-muted">No Completion History Found</h4>
+            <p class="text-muted">Complete some reconciliations to see their history here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
