@@ -3,13 +3,14 @@ Reconciliation Work Allocation App with Role-Based Access Control
 - Admin: Full access (add/edit/delete)
 - User: View and mark completion only
 """
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, date, timedelta, timezone
 import os
 import sys
+import io
 
 # Sri Lanka timezone (UTC+5:30)
 SL_OFFSET = timedelta(hours=5, minutes=30)
@@ -219,6 +220,27 @@ class Notification(db.Model):
     user = db.relationship('User', backref='notifications')
     team_member = db.relationship('TeamMember', backref='notifications')
     reconciliation = db.relationship('Reconciliation', backref='notifications')
+
+class CompletionHistory(db.Model):
+    """Track all reconciliation completions for historical reporting"""
+    id = db.Column(db.Integer, primary_key=True)
+    reconciliation_id = db.Column(db.Integer, db.ForeignKey('reconciliation.id'), nullable=False)
+    reconciliation_name = db.Column(db.String(200), nullable=False)
+    frequency = db.Column(db.String(20), nullable=False)
+    priority = db.Column(db.String(20))
+    source_system = db.Column(db.String(100))
+    target_system = db.Column(db.String(100))
+    assigned_to_name = db.Column(db.String(100))
+    completed_by = db.Column(db.String(100))
+    due_date = db.Column(db.Date)
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    items_reconciled = db.Column(db.Integer, default=0)
+    exceptions_found = db.Column(db.Integer, default=0)
+    completion_notes = db.Column(db.Text)
+    was_overdue = db.Column(db.Boolean, default=False)
+    days_overdue = db.Column(db.Integer, default=0)
+    
+    reconciliation = db.relationship('Reconciliation', backref='completion_history')
 
 # ============== NOTIFICATION FUNCTIONS ==============
 
@@ -505,10 +527,20 @@ def dashboard():
         Reconciliation.status != 'Completed'
     ).all()
     
-    overdue = Reconciliation.query.filter(
-        Reconciliation.due_date < today,
+    # Filter due_today to exclude items that are actually overdue (for daily items with time)
+    due_today = [r for r in due_today if not r.is_overdue()]
+    
+    # Get all potential overdue items (due_date < today OR due_date == today but past due_time)
+    potential_overdue = Reconciliation.query.filter(
+        Reconciliation.due_date <= today,
         Reconciliation.status != 'Completed'
     ).all()
+    
+    # Filter to only actually overdue items using the is_overdue method
+    overdue = [r for r in potential_overdue if r.is_overdue()]
+    
+    # Create notifications for new overdue items
+    check_and_create_overdue_notifications()
     
     members = TeamMember.query.all()
     workload = []
@@ -737,6 +769,32 @@ def complete_reconciliation(id):
         return redirect(url_for('list_reconciliations'))
     
     if request.method == 'POST':
+        # Calculate if it was overdue and by how many days
+        was_overdue = rec.is_overdue()
+        days_overdue = 0
+        if rec.due_date and rec.due_date < get_sl_today():
+            days_overdue = (get_sl_today() - rec.due_date).days
+        
+        # Save completion history before updating
+        history = CompletionHistory(
+            reconciliation_id=rec.id,
+            reconciliation_name=rec.name,
+            frequency=rec.frequency,
+            priority=rec.priority,
+            source_system=rec.source_system,
+            target_system=rec.target_system,
+            assigned_to_name=rec.assignee.name if rec.assignee else 'Unassigned',
+            completed_by=current_user.name if current_user else 'Unknown',
+            due_date=rec.due_date,
+            completed_at=datetime.utcnow(),
+            items_reconciled=int(request.form.get('items_reconciled', 0)),
+            exceptions_found=int(request.form.get('exceptions_found', 0)),
+            completion_notes=request.form.get('completion_notes', ''),
+            was_overdue=was_overdue,
+            days_overdue=days_overdue
+        )
+        db.session.add(history)
+        
         rec.status = 'Completed'
         rec.last_completed = datetime.utcnow()
         rec.items_reconciled = int(request.form.get('items_reconciled', 0))
@@ -906,6 +964,223 @@ def monthly_view():
     members = TeamMember.query.all()
     return render_template('frequency_view.html', recs=monthly_recs, members=members, today=today,
                          frequency='Monthly', title='Monthly Reconciliations')
+
+# ============== COMPLETION HISTORY & REPORTS (Admin Only) ==============
+
+@app.route('/history')
+@admin_required
+def completion_history():
+    """View completion history with filters"""
+    # Get filter parameters
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    frequency_filter = request.args.get('frequency', '')
+    member_filter = request.args.get('member', '')
+    overdue_only = request.args.get('overdue_only', '') == 'true'
+    
+    query = CompletionHistory.query
+    
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(CompletionHistory.completed_at >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(CompletionHistory.completed_at < to_date)
+        except ValueError:
+            pass
+    
+    if frequency_filter:
+        query = query.filter(CompletionHistory.frequency == frequency_filter)
+    
+    if member_filter:
+        query = query.filter(CompletionHistory.assigned_to_name == member_filter)
+    
+    if overdue_only:
+        query = query.filter(CompletionHistory.was_overdue == True)
+    
+    history = query.order_by(CompletionHistory.completed_at.desc()).all()
+    
+    # Get unique member names for filter dropdown
+    members = db.session.query(CompletionHistory.assigned_to_name).distinct().all()
+    member_names = [m[0] for m in members if m[0]]
+    
+    # Calculate summary stats
+    total_completions = len(history)
+    total_overdue = sum(1 for h in history if h.was_overdue)
+    total_items = sum(h.items_reconciled or 0 for h in history)
+    total_exceptions = sum(h.exceptions_found or 0 for h in history)
+    
+    return render_template('history.html', 
+                         history=history,
+                         member_names=member_names,
+                         date_from=date_from,
+                         date_to=date_to,
+                         frequency_filter=frequency_filter,
+                         member_filter=member_filter,
+                         overdue_only=overdue_only,
+                         total_completions=total_completions,
+                         total_overdue=total_overdue,
+                         total_items=total_items,
+                         total_exceptions=total_exceptions)
+
+@app.route('/history/export')
+@admin_required
+def export_history():
+    """Export completion history to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        flash('Excel export requires openpyxl. Please install it: pip install openpyxl', 'error')
+        return redirect(url_for('completion_history'))
+    
+    # Get filter parameters (same as history view)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    frequency_filter = request.args.get('frequency', '')
+    member_filter = request.args.get('member', '')
+    overdue_only = request.args.get('overdue_only', '') == 'true'
+    
+    query = CompletionHistory.query
+    
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(CompletionHistory.completed_at >= from_date)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(CompletionHistory.completed_at < to_date)
+        except ValueError:
+            pass
+    
+    if frequency_filter:
+        query = query.filter(CompletionHistory.frequency == frequency_filter)
+    
+    if member_filter:
+        query = query.filter(CompletionHistory.assigned_to_name == member_filter)
+    
+    if overdue_only:
+        query = query.filter(CompletionHistory.was_overdue == True)
+    
+    history = query.order_by(CompletionHistory.completed_at.desc()).all()
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Completion History"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1e293b", end_color="1e293b", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    overdue_fill = PatternFill(start_color="fef2f2", end_color="fef2f2", fill_type="solid")
+    
+    # Headers
+    headers = [
+        "ID", "Reconciliation Name", "Frequency", "Priority", 
+        "Source System", "Target System", "Assigned To", "Completed By",
+        "Due Date", "Completed At", "Items Reconciled", "Exceptions Found",
+        "Was Overdue", "Days Overdue", "Notes"
+    ]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Data rows
+    for row, h in enumerate(history, 2):
+        data = [
+            h.id,
+            h.reconciliation_name,
+            h.frequency,
+            h.priority,
+            h.source_system or '',
+            h.target_system or '',
+            h.assigned_to_name or '',
+            h.completed_by or '',
+            h.due_date.strftime('%Y-%m-%d') if h.due_date else '',
+            (h.completed_at + SL_OFFSET).strftime('%Y-%m-%d %H:%M') if h.completed_at else '',
+            h.items_reconciled or 0,
+            h.exceptions_found or 0,
+            'Yes' if h.was_overdue else 'No',
+            h.days_overdue or 0,
+            h.completion_notes or ''
+        ]
+        
+        for col, value in enumerate(data, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center")
+            if h.was_overdue:
+                cell.fill = overdue_fill
+    
+    # Adjust column widths
+    column_widths = [6, 30, 10, 10, 15, 15, 15, 15, 12, 18, 15, 15, 12, 12, 40]
+    for col, width in enumerate(column_widths, 1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+    
+    # Freeze header row
+    ws.freeze_panes = 'A2'
+    
+    # Add summary sheet
+    ws_summary = wb.create_sheet(title="Summary")
+    ws_summary['A1'] = "Completion History Summary"
+    ws_summary['A1'].font = Font(bold=True, size=14)
+    
+    ws_summary['A3'] = "Total Completions:"
+    ws_summary['B3'] = len(history)
+    ws_summary['A4'] = "Total Overdue:"
+    ws_summary['B4'] = sum(1 for h in history if h.was_overdue)
+    ws_summary['A5'] = "Total Items Reconciled:"
+    ws_summary['B5'] = sum(h.items_reconciled or 0 for h in history)
+    ws_summary['A6'] = "Total Exceptions Found:"
+    ws_summary['B6'] = sum(h.exceptions_found or 0 for h in history)
+    
+    if date_from or date_to:
+        ws_summary['A8'] = "Date Range:"
+        ws_summary['B8'] = f"{date_from or 'Beginning'} to {date_to or 'Present'}"
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Generate filename
+    filename = f"reconciliation_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return Response(
+        output.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.route('/api/notifications/dismiss/<int:id>', methods=['POST'])
+@login_required
+def api_dismiss_notification(id):
+    """Dismiss/delete a notification completely"""
+    notif = Notification.query.get_or_404(id)
+    db.session.delete(notif)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'message': 'Notification dismissed'})
 
 # ============== SETTINGS ==============
 
