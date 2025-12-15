@@ -17,6 +17,19 @@
     {% endif %}
 </div>
 
+<!-- Overdue Alert Banner -->
+{% if overdue_count and overdue_count > 0 %}
+<div class="alert alert-danger d-flex align-items-center justify-content-between mb-4" role="alert">
+    <div>
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>{{ overdue_count }} overdue item{% if overdue_count != 1 %}s{% endif %}</strong> need attention!
+    </div>
+    <a href="{{ url_for('overdue_items') }}" class="btn btn-danger">
+        <i class="bi bi-arrow-right"></i> View Overdue Items
+    </a>
+</div>
+{% endif %}
+
 <!-- Summary Cards -->
 <div class="row mb-4">
     {% set pending = recs | selectattr('status', 'eq', 'Pending') | list | length %}
@@ -75,7 +88,7 @@
                 </thead>
                 <tbody>
                     {% for rec in recs %}
-                    <tr class="{% if rec.due_date and rec.due_date < today and rec.status != 'Completed' %}overdue-row{% elif rec.due_date == today and rec.status != 'Completed' %}due-today-row{% endif %}">
+                    <tr class="{% if rec.due_date == today and rec.status != 'Completed' %}due-today-row{% endif %}">
                         <td>
                             <a href="{{ url_for('view_reconciliation', id=rec.id) }}" class="text-decoration-none">
                                 <strong>{{ rec.name }}</strong>
@@ -86,9 +99,7 @@
                         <td><span class="badge badge-status-{{ rec.status.replace(' ', '-') }}">{{ rec.status }}</span></td>
                         <td>
                             {% if rec.due_date %}
-                                {% if rec.due_date < today and rec.status != 'Completed' %}
-                                    <span class="text-danger fw-bold">OVERDUE</span>
-                                {% elif rec.due_date == today %}
+                                {% if rec.due_date == today %}
                                     <span class="text-warning fw-bold">TODAY</span>
                                 {% else %}
                                     {{ rec.due_date.strftime('%m-%d') }}
@@ -109,7 +120,7 @@
                             </a>
                             {% endif %}
                             {% if rec.status != 'Completed' %}
-                            <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-sm btn-success" title="Complete">
+                            <a href="{{ url_for('complete_reconciliation', id=rec.id, return_url=request.url) }}" class="btn btn-sm btn-success" title="Complete">
                                 <i class="bi bi-check-lg"></i>
                             </a>
                             {% endif %}

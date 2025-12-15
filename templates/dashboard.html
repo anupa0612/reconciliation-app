@@ -60,37 +60,23 @@
     </div>
 </div>
 
-<!-- Overdue Alert - Collapsible (Expanded by default) -->
+<!-- Overdue Alert - Link to dedicated page -->
 {% if overdue %}
 <div class="card mb-4" style="border-left: 4px solid #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
-    <div class="card-header d-flex justify-content-between align-items-center py-3" 
-         style="background: transparent; border-bottom: 1px solid rgba(239,68,68,0.2); cursor: pointer;"
-         data-bs-toggle="collapse" data-bs-target="#overdueCollapse" aria-expanded="true">
-        <h6 class="mb-0" style="color: #991b1b; font-weight: 700;">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>Overdue Reconciliations
-            <span class="badge bg-danger ms-2">{{ overdue | length }}</span>
-        </h6>
-        <button class="btn btn-sm btn-link p-0" style="color: #991b1b; text-decoration: none;">
-            <i class="bi bi-chevron-down collapse-icon" style="transition: transform 0.3s;"></i>
-        </button>
-    </div>
-    <div class="collapse show" id="overdueCollapse">
-        <div class="card-body pt-3">
-            <div class="row g-2">
-                {% for rec in overdue %}
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center p-3" style="background: rgba(255,255,255,0.7); border-radius: 8px; border: 1px solid rgba(239,68,68,0.2);">
-                        <div style="flex: 1; min-width: 0; margin-right: 12px;">
-                            <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #991b1b; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
-                            <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
-                        </div>
-                        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
-                            <i class="bi bi-check-lg me-1"></i>Complete
-                        </a>
-                    </div>
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill text-danger fs-4 me-3"></i>
+                <div>
+                    <h6 class="mb-0" style="color: #991b1b; font-weight: 700;">
+                        {{ overdue | length }} Overdue Reconciliation{% if overdue | length != 1 %}s{% endif %}
+                    </h6>
+                    <small class="text-muted">These items need immediate attention from an administrator</small>
                 </div>
-                {% endfor %}
             </div>
+            <a href="{{ url_for('overdue_items') }}" class="btn btn-danger">
+                <i class="bi bi-arrow-right me-1"></i> View Overdue Items
+            </a>
         </div>
     </div>
 </div>
@@ -120,7 +106,7 @@
                             <a href="{{ url_for('view_reconciliation', id=rec.id) }}" style="color: #92400e; font-weight: 600; text-decoration: none;">{{ rec.name }}</a>
                             <small class="text-muted ms-2">({{ rec.assignee.name if rec.assignee else 'Unassigned' }})</small>
                         </div>
-                        <a href="{{ url_for('complete_reconciliation', id=rec.id) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
+                        <a href="{{ url_for('complete_reconciliation', id=rec.id, return_url=url_for('dashboard')) }}" class="btn btn-success btn-sm" style="flex-shrink: 0;">
                             <i class="bi bi-check-lg me-1"></i>Complete
                         </a>
                     </div>
