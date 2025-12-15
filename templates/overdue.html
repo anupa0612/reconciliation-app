@@ -62,12 +62,12 @@
                         </td>
                         <td>
                             {% if current_user and current_user.is_admin() %}
-                            <a href="{{ url_for('resolve_overdue', id=record.id) }}" class="btn btn-sm btn-success" title="Resolve">
-                                <i class="bi bi-check-lg"></i> Resolve
+                            <a href="{{ url_for('resolve_overdue', id=record.id) }}" class="btn btn-success" style="white-space: nowrap; padding: 6px 16px;" title="Resolve">
+                                <i class="bi bi-check-lg me-1"></i> Resolve
                             </a>
                             {% else %}
-                            <button class="btn btn-sm btn-secondary" disabled title="Only admins can resolve overdue items">
-                                <i class="bi bi-lock"></i> Locked
+                            <button class="btn btn-secondary" disabled title="Only admins can resolve overdue items" style="white-space: nowrap;">
+                                <i class="bi bi-lock me-1"></i> Locked
                             </button>
                             {% endif %}
                         </td>

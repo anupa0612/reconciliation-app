@@ -209,6 +209,19 @@
             font-size: 0.7rem;
             color: #94a3b8;
         }
+        .notification-item .btn-link {
+            width: auto !important;
+            height: auto !important;
+            padding: 4px !important;
+            font-size: 1rem;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .notification-item .btn-link:hover {
+            opacity: 1;
+            background: rgba(0,0,0,0.05);
+            border-radius: 4px;
+        }
         .notification-empty {
             padding: 40px 20px;
             text-align: center;
@@ -260,29 +273,26 @@
             color: #64748b;
         }
         .toast-notification .toast-close {
-            background: none;
+            background: #f1f5f9;
             border: none;
-            color: #94a3b8;
+            color: #64748b;
             cursor: pointer;
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             line-height: 1;
-            padding: 0;
-            margin: 0;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 4px 8px;
+            margin: -5px -10px -5px 0;
             border-radius: 4px;
             transition: all 0.2s ease;
             flex-shrink: 0;
+            z-index: 10;
+            position: relative;
         }
         .toast-notification .toast-close:hover {
-            background-color: #f1f5f9;
-            color: #64748b;
+            background-color: #e2e8f0;
+            color: #334155;
         }
         .toast-notification .toast-close:active {
-            background-color: #e2e8f0;
+            background-color: #cbd5e1;
         }
         @keyframes toastSlideOut {
             from { opacity: 1; transform: translateX(0); }
@@ -317,7 +327,7 @@
                     </a>
                     <a class="nav-link {% if request.endpoint == 'overdue_items' %}active{% endif %}" href="{{ url_for('overdue_items') }}" style="{% if request.endpoint == 'overdue_items' %}background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;{% endif %}">
                         <i class="bi bi-exclamation-triangle"></i> Overdue Items
-                        <span class="badge bg-danger ms-auto" id="sidebarOverdueCount" style="display: none;">0</span>
+                        <span class="badge bg-danger rounded-pill ms-auto" id="sidebarOverdueCount" style="display: none; font-size: 0.7rem; padding: 3px 7px; min-width: auto;">0</span>
                     </a>
                     <a class="nav-link {% if request.endpoint == 'daily_view' %}active{% endif %}" href="{{ url_for('daily_view') }}">
                         <i class="bi bi-calendar-day"></i> Daily

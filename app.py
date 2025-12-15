@@ -751,6 +751,9 @@ def resolve_overdue(id):
         if rec:
             rec.overdue_notified = False
         
+        # Delete related notifications for this overdue item
+        Notification.query.filter_by(rec_id=record.reconciliation_id, type='danger').delete()
+        
         db.session.commit()
         flash(f'Overdue record for "{record.reconciliation_name}" has been resolved!', 'success')
         return redirect(url_for('overdue_items'))
