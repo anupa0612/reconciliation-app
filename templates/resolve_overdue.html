@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block title %}Resolve Overdue - Reconciliation Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-check-circle text-success"></i> Resolve Overdue Item</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card form-card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">{{ record.reconciliation_name }}</h5>
+                <small class="text-muted">
+                    <span class="badge badge-frequency-{{ record.frequency }}">{{ record.frequency }}</span>
+                    {% if record.source_system and record.target_system %}
+                    | {{ record.source_system }} → {{ record.target_system }}
+                    {% endif %}
+                </small>
+            </div>
+            <div class="card-body p-4">
+                <div class="alert alert-warning mb-4">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>This item was due on {{ record.due_date.strftime('%Y-%m-%d') }}{% if record.due_time %} at {{ record.due_time }}{% endif %}</strong>
+                    <br>It is now <strong>{{ (today - record.due_date).days }} day(s)</strong> overdue.
+                </div>
+                
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="items_reconciled" class="form-label">Items Reconciled (if any)</label>
+                            <input type="number" class="form-control" id="items_reconciled" name="items_reconciled" min="0" value="0">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="exceptions_found" class="form-label">Exceptions Found</label>
+                            <input type="number" class="form-control" id="exceptions_found" name="exceptions_found" min="0" value="0">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="resolution_notes" class="form-label">Resolution Notes <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="resolution_notes" name="resolution_notes" rows="4" required placeholder="Explain what happened and how this was resolved. Was the work completed late? Was it skipped? Any issues encountered?"></textarea>
+                        <small class="text-muted">Please document what happened with this overdue item for record-keeping.</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Resolving this overdue record will:
+                        <ul class="mb-0 mt-2">
+                            <li>Mark this overdue item as resolved</li>
+                            <li>Record the resolution in completion history</li>
+                            <li>The current cycle is already available for users to work on</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-check-lg"></i> Resolve Overdue
+                        </button>
+                        <a href="{{ url_for('overdue_items') }}" class="btn btn-secondary btn-lg">
+                            <i class="bi bi-x-lg"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card form-card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Overdue Details</h5>
+            </div>
+            <div class="card-body">
+                <p><small class="text-muted">Assigned To</small><br>
+                {{ record.assigned_to_name or 'Unassigned' }}</p>
+                
+                <p><small class="text-muted">Priority</small><br>
+                <span class="badge badge-priority-{{ record.priority }}">{{ record.priority }}</span></p>
+                
+                <p><small class="text-muted">Due Date</small><br>
+                <span class="text-danger fw-bold">{{ record.due_date.strftime('%Y-%m-%d') }}</span>
+                {% if record.due_time %} at {{ record.due_time }}{% endif %}</p>
+                
+                <p><small class="text-muted">Days Overdue</small><br>
+                <span class="badge bg-danger">{{ (today - record.due_date).days }} days</span></p>
+                
+                <p><small class="text-muted">Overdue Since</small><br>
+                {{ record.created_at|local_time }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

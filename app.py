@@ -242,6 +242,28 @@ class CompletionHistory(db.Model):
     
     reconciliation = db.relationship('Reconciliation', backref='completion_history')
 
+class OverdueRecord(db.Model):
+    """Track overdue reconciliations that need admin attention"""
+    id = db.Column(db.Integer, primary_key=True)
+    reconciliation_id = db.Column(db.Integer, db.ForeignKey('reconciliation.id'), nullable=False)
+    reconciliation_name = db.Column(db.String(200), nullable=False)
+    frequency = db.Column(db.String(20), nullable=False)
+    priority = db.Column(db.String(20))
+    source_system = db.Column(db.String(100))
+    target_system = db.Column(db.String(100))
+    assigned_to_name = db.Column(db.String(100))
+    due_date = db.Column(db.Date, nullable=False)
+    due_time = db.Column(db.String(5))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved = db.Column(db.Boolean, default=False)
+    resolved_at = db.Column(db.DateTime)
+    resolved_by = db.Column(db.String(100))
+    resolution_notes = db.Column(db.Text)
+    items_reconciled = db.Column(db.Integer, default=0)
+    exceptions_found = db.Column(db.Integer, default=0)
+    
+    reconciliation = db.relationship('Reconciliation', backref='overdue_records')
+
 # ============== NOTIFICATION FUNCTIONS ==============
 
 def create_overdue_notification(rec):
@@ -280,22 +302,52 @@ def create_overdue_notification(rec):
     return True
 
 def check_and_create_overdue_notifications():
-    """Check for overdue items and create notifications"""
-    # Get all overdue reconciliations that haven't been notified
-    overdue_recs = Reconciliation.query.filter(
+    """Check for overdue items, create notifications, and move to overdue records"""
+    # Get all non-completed reconciliations that might be overdue
+    potential_overdue = Reconciliation.query.filter(
         Reconciliation.status != 'Completed',
         Reconciliation.overdue_notified == False
     ).all()
     
     # Filter to actually overdue items
-    overdue_recs = [r for r in overdue_recs if r.is_overdue()]
+    overdue_recs = [r for r in potential_overdue if r.is_overdue()]
     
+    count = 0
     for rec in overdue_recs:
-        if create_overdue_notification(rec):
-            rec.overdue_notified = True
+        # Create overdue record
+        overdue_record = OverdueRecord(
+            reconciliation_id=rec.id,
+            reconciliation_name=rec.name,
+            frequency=rec.frequency,
+            priority=rec.priority,
+            source_system=rec.source_system,
+            target_system=rec.target_system,
+            assigned_to_name=rec.assignee.name if rec.assignee else 'Unassigned',
+            due_date=rec.due_date,
+            due_time=rec.due_time
+        )
+        db.session.add(overdue_record)
+        
+        # Create notification
+        create_overdue_notification(rec)
+        
+        # Reset the rec for the next cycle so users can continue working
+        rec.status = 'Pending'
+        rec.due_date = rec.calculate_next_due()
+        rec.next_due = None  # Will be calculated on next completion
+        rec.items_reconciled = 0
+        rec.exceptions_found = 0
+        rec.completion_notes = ''
+        rec.completed_by = None
+        rec.overdue_notified = True  # Mark so we don't process again until next overdue
+        
+        count += 1
     
-    db.session.commit()
-    return len(overdue_recs)
+    if count > 0:
+        db.session.commit()
+        print(f"[OVERDUE] Created {count} overdue record(s) and reset reconciliations for new cycle")
+    
+    return count
 
 def get_user_notifications(user):
     """Get notifications for a specific user"""
@@ -507,6 +559,8 @@ def delete_user(id):
 def dashboard():
     # Auto-reset completed reconciliations that are due
     auto_reset_completed_reconciliations()
+    # Check for overdue and create records
+    check_and_create_overdue_notifications()
     
     today = get_sl_today()
     
@@ -527,20 +581,8 @@ def dashboard():
         Reconciliation.status != 'Completed'
     ).all()
     
-    # Filter due_today to exclude items that are actually overdue (for daily items with time)
-    due_today = [r for r in due_today if not r.is_overdue()]
-    
-    # Get all potential overdue items (due_date < today OR due_date == today but past due_time)
-    potential_overdue = Reconciliation.query.filter(
-        Reconciliation.due_date <= today,
-        Reconciliation.status != 'Completed'
-    ).all()
-    
-    # Filter to only actually overdue items using the is_overdue method
-    overdue = [r for r in potential_overdue if r.is_overdue()]
-    
-    # Create notifications for new overdue items
-    check_and_create_overdue_notifications()
+    # Get unresolved overdue records
+    overdue_records = OverdueRecord.query.filter_by(resolved=False).all()
     
     members = TeamMember.query.all()
     workload = []
@@ -560,7 +602,7 @@ def dashboard():
                          daily_recs=daily_recs, weekly_recs=weekly_recs, monthly_recs=monthly_recs,
                          pending_recs=pending_recs, in_progress_recs=in_progress_recs,
                          completed_recs=completed_recs, on_hold_recs=on_hold_recs,
-                         due_today=due_today, overdue=overdue,
+                         due_today=due_today, overdue_records=overdue_records,
                          workload=workload, recent_completed=recent_completed, today=today)
 
 # ============== TEAM MEMBER ROUTES ==============
@@ -622,12 +664,13 @@ def delete_member(id):
 def list_reconciliations():
     # Auto-reset completed reconciliations that are due
     auto_reset_completed_reconciliations()
+    # Check for overdue and create records
+    check_and_create_overdue_notifications()
     
     status_filter = request.args.get('status', '')
     frequency_filter = request.args.get('frequency', '')
     priority_filter = request.args.get('priority', '')
     member_filter = request.args.get('member', '')
-    include_overdue = request.args.get('include_overdue', '') == 'true'
     
     query = Reconciliation.query
     
@@ -641,43 +684,78 @@ def list_reconciliations():
         query = query.filter_by(assigned_to=int(member_filter))
     
     recs = query.order_by(Reconciliation.due_date.asc()).all()
-    
-    # Filter out overdue items unless explicitly included or showing completed
-    if not include_overdue and status_filter != 'Completed':
-        recs = [r for r in recs if not r.is_overdue()]
-    
     members = TeamMember.query.all()
     today = get_sl_today()
     
-    # Count overdue items for badge
-    overdue_count = len([r for r in Reconciliation.query.filter(Reconciliation.status != 'Completed').all() if r.is_overdue()])
+    # Count unresolved overdue records for badge
+    overdue_count = OverdueRecord.query.filter_by(resolved=False).count()
     
     return render_template('reconciliations.html', recs=recs, members=members,
                          status_filter=status_filter, frequency_filter=frequency_filter,
                          priority_filter=priority_filter, member_filter=member_filter, 
-                         include_overdue=include_overdue, overdue_count=overdue_count, today=today)
+                         overdue_count=overdue_count, today=today)
 
 @app.route('/overdue')
 @login_required
 def overdue_items():
-    """Dedicated page for overdue reconciliations"""
+    """Dedicated page for overdue reconciliations (shows OverdueRecords)"""
     # Auto-reset completed reconciliations that are due
     auto_reset_completed_reconciliations()
+    # Check for new overdue items and create records
     check_and_create_overdue_notifications()
     
-    # Get all non-completed reconciliations
-    all_recs = Reconciliation.query.filter(Reconciliation.status != 'Completed').all()
+    # Get all unresolved overdue records
+    overdue_records = OverdueRecord.query.filter_by(resolved=False).order_by(OverdueRecord.due_date.asc()).all()
     
-    # Filter to only overdue items
-    overdue_recs = [r for r in all_recs if r.is_overdue()]
-    
-    # Sort by due date (oldest first - most overdue)
-    overdue_recs.sort(key=lambda x: x.due_date if x.due_date else date.max)
-    
-    members = TeamMember.query.all()
     today = get_sl_today()
     
-    return render_template('overdue.html', recs=overdue_recs, members=members, today=today)
+    return render_template('overdue.html', records=overdue_records, today=today)
+
+@app.route('/overdue/resolve/<int:id>', methods=['GET', 'POST'])
+@admin_required
+def resolve_overdue(id):
+    """Resolve an overdue record"""
+    record = OverdueRecord.query.get_or_404(id)
+    current_user = get_current_user()
+    
+    if request.method == 'POST':
+        record.resolved = True
+        record.resolved_at = datetime.utcnow()
+        record.resolved_by = current_user.name if current_user else 'Unknown'
+        record.resolution_notes = request.form.get('resolution_notes', '')
+        record.items_reconciled = int(request.form.get('items_reconciled', 0))
+        record.exceptions_found = int(request.form.get('exceptions_found', 0))
+        
+        # Also save to completion history as overdue completion
+        history = CompletionHistory(
+            reconciliation_id=record.reconciliation_id,
+            reconciliation_name=record.reconciliation_name,
+            frequency=record.frequency,
+            priority=record.priority,
+            source_system=record.source_system,
+            target_system=record.target_system,
+            assigned_to_name=record.assigned_to_name,
+            completed_by=current_user.name if current_user else 'Unknown',
+            due_date=record.due_date,
+            completed_at=datetime.utcnow(),
+            items_reconciled=record.items_reconciled,
+            exceptions_found=record.exceptions_found,
+            completion_notes=record.resolution_notes,
+            was_overdue=True,
+            days_overdue=(get_sl_today() - record.due_date).days if record.due_date else 0
+        )
+        db.session.add(history)
+        
+        # Reset the overdue_notified flag on the reconciliation so future overdue can be detected
+        rec = Reconciliation.query.get(record.reconciliation_id)
+        if rec:
+            rec.overdue_notified = False
+        
+        db.session.commit()
+        flash(f'Overdue record for "{record.reconciliation_name}" has been resolved!', 'success')
+        return redirect(url_for('overdue_items'))
+    
+    return render_template('resolve_overdue.html', record=record, today=get_sl_today())
 
 @app.route('/reconciliations/add', methods=['GET', 'POST'])
 @admin_required
@@ -792,16 +870,14 @@ def view_reconciliation(id):
 @app.route('/reconciliations/complete/<int:id>', methods=['GET', 'POST'])
 @login_required
 def complete_reconciliation(id):
+    # First, check for any overdue items and create records
+    check_and_create_overdue_notifications()
+    
     rec = Reconciliation.query.get_or_404(id)
     current_user = get_current_user()
     
     # Get return URL from query params or referrer
     return_url = request.args.get('return_url') or request.referrer or url_for('list_reconciliations')
-    
-    # If overdue, only admin can complete
-    if rec.is_overdue() and not current_user.is_admin():
-        flash('This reconciliation is overdue. Only an administrator can mark it as complete.', 'error')
-        return redirect(return_url)
     
     if request.method == 'POST':
         # Get return URL from hidden form field
@@ -980,12 +1056,11 @@ def view_notifications():
 @login_required
 def daily_view():
     auto_reset_completed_reconciliations()
+    check_and_create_overdue_notifications()
     today = get_sl_today()
     daily_recs = Reconciliation.query.filter_by(frequency='Daily').order_by(Reconciliation.status.asc()).all()
-    # Exclude overdue items - they go to the overdue page
-    daily_recs = [r for r in daily_recs if not r.is_overdue()]
     members = TeamMember.query.all()
-    overdue_count = len([r for r in Reconciliation.query.filter(Reconciliation.status != 'Completed').all() if r.is_overdue()])
+    overdue_count = OverdueRecord.query.filter_by(resolved=False).count()
     return render_template('frequency_view.html', recs=daily_recs, members=members, today=today,
                          frequency='Daily', title='Daily Reconciliations', overdue_count=overdue_count)
 
@@ -993,12 +1068,11 @@ def daily_view():
 @login_required
 def weekly_view():
     auto_reset_completed_reconciliations()
+    check_and_create_overdue_notifications()
     today = get_sl_today()
     weekly_recs = Reconciliation.query.filter_by(frequency='Weekly').order_by(Reconciliation.due_date.asc()).all()
-    # Exclude overdue items - they go to the overdue page
-    weekly_recs = [r for r in weekly_recs if not r.is_overdue()]
     members = TeamMember.query.all()
-    overdue_count = len([r for r in Reconciliation.query.filter(Reconciliation.status != 'Completed').all() if r.is_overdue()])
+    overdue_count = OverdueRecord.query.filter_by(resolved=False).count()
     return render_template('frequency_view.html', recs=weekly_recs, members=members, today=today,
                          frequency='Weekly', title='Weekly Reconciliations', overdue_count=overdue_count)
 
@@ -1006,12 +1080,11 @@ def weekly_view():
 @login_required
 def monthly_view():
     auto_reset_completed_reconciliations()
+    check_and_create_overdue_notifications()
     today = get_sl_today()
     monthly_recs = Reconciliation.query.filter_by(frequency='Monthly').order_by(Reconciliation.due_date.asc()).all()
-    # Exclude overdue items - they go to the overdue page
-    monthly_recs = [r for r in monthly_recs if not r.is_overdue()]
     members = TeamMember.query.all()
-    overdue_count = len([r for r in Reconciliation.query.filter(Reconciliation.status != 'Completed').all() if r.is_overdue()])
+    overdue_count = OverdueRecord.query.filter_by(resolved=False).count()
     return render_template('frequency_view.html', recs=monthly_recs, members=members, today=today,
                          frequency='Monthly', title='Monthly Reconciliations', overdue_count=overdue_count)
 
@@ -1235,9 +1308,11 @@ def api_dismiss_notification(id):
 @app.route('/api/overdue-count')
 @login_required
 def api_overdue_count():
-    """Get count of overdue items"""
-    all_recs = Reconciliation.query.filter(Reconciliation.status != 'Completed').all()
-    overdue_count = len([r for r in all_recs if r.is_overdue()])
+    """Get count of unresolved overdue records"""
+    # First check for any new overdue items
+    check_and_create_overdue_notifications()
+    # Count unresolved overdue records
+    overdue_count = OverdueRecord.query.filter_by(resolved=False).count()
     return jsonify({'count': overdue_count})
 
 # ============== SETTINGS ==============

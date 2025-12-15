@@ -52,7 +52,7 @@
             <div class="card-body d-flex align-items-center">
                 <div class="stat-icon me-3"><i class="bi bi-exclamation-triangle"></i></div>
                 <div>
-                    <h3 class="mb-0">{{ overdue | length }}</h3>
+                    <h3 class="mb-0">{{ overdue_records | length }}</h3>
                     <small class="text-muted">Overdue</small>
                 </div>
             </div>
@@ -61,7 +61,7 @@
 </div>
 
 <!-- Overdue Alert - Link to dedicated page -->
-{% if overdue %}
+{% if overdue_records %}
 <div class="card mb-4" style="border-left: 4px solid #ef4444; background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
     <div class="card-body py-3">
         <div class="d-flex justify-content-between align-items-center">
@@ -69,13 +69,13 @@
                 <i class="bi bi-exclamation-triangle-fill text-danger fs-4 me-3"></i>
                 <div>
                     <h6 class="mb-0" style="color: #991b1b; font-weight: 700;">
-                        {{ overdue | length }} Overdue Reconciliation{% if overdue | length != 1 %}s{% endif %}
+                        {{ overdue_records | length }} Overdue Item{% if overdue_records | length != 1 %}s{% endif %} Need Resolution
                     </h6>
-                    <small class="text-muted">These items need immediate attention from an administrator</small>
+                    <small class="text-muted">These items were not completed on time and require admin attention</small>
                 </div>
             </div>
             <a href="{{ url_for('overdue_items') }}" class="btn btn-danger">
-                <i class="bi bi-arrow-right me-1"></i> View Overdue Items
+                <i class="bi bi-arrow-right me-1"></i> View & Resolve
             </a>
         </div>
     </div>
