@@ -234,70 +234,8 @@
             background: #f8fafc;
         }
         
-        /* Toast Notification */
-        .toast-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1100;
-        }
-        .toast-notification {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
-            padding: 15px 20px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            max-width: 350px;
-            animation: toastSlideIn 0.3s ease;
-            border-left: 4px solid var(--danger-color);
-        }
-        @keyframes toastSlideIn {
-            from { opacity: 0; transform: translateX(100px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        .toast-notification .toast-icon {
-            font-size: 1.5rem;
-            color: var(--danger-color);
-        }
-        .toast-notification .toast-content { flex: 1; }
-        .toast-notification .toast-title {
-            font-weight: 600;
-            font-size: 0.9rem;
-            margin-bottom: 4px;
-        }
-        .toast-notification .toast-message {
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-        .toast-notification .toast-close {
-            background: #f1f5f9;
-            border: none;
-            color: #64748b;
-            cursor: pointer;
-            font-size: 1.2rem;
-            line-height: 1;
-            padding: 4px 8px;
-            margin: -5px -10px -5px 0;
-            border-radius: 4px;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-            z-index: 10;
-            position: relative;
-        }
-        .toast-notification .toast-close:hover {
-            background-color: #e2e8f0;
-            color: #334155;
-        }
-        .toast-notification .toast-close:active {
-            background-color: #cbd5e1;
-        }
-        @keyframes toastSlideOut {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(100px); }
-        }
+        /* Note: Toast popups intentionally removed.
+           Notifications are shown only inside the Notifications panel. */
     </style>
 </head>
 <body>
@@ -421,16 +359,13 @@
         </div>
     </div>
     
-    <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <!-- Toast popups removed (notifications shown only in the panel) -->
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
         let notificationsOpen = false;
-        let lastNotificationCount = 0;
-        let shownToasts = new Set();
         
         function toggleNotifications() {
             const dropdown = document.getElementById('notificationDropdown');
@@ -462,16 +397,7 @@
                     updateNotificationBadge(data.count);
                     renderNotifications(data.notifications);
                     
-                    // Show toast for new notifications
-                    if (data.count > lastNotificationCount) {
-                        data.notifications.forEach(notif => {
-                            if (!shownToasts.has(notif.id) && notif.type === 'danger') {
-                                showToast(notif);
-                                shownToasts.add(notif.id);
-                            }
-                        });
-                    }
-                    lastNotificationCount = data.count;
+                    // Toast popups removed by design.
                 })
                 .catch(err => console.log('Error fetching notifications:', err));
         }
@@ -556,49 +482,7 @@
                 });
         }
         
-        function showToast(notif) {
-            const container = document.getElementById('toastContainer');
-            if (!container) return;
-            
-            const toastId = 'toast-' + notif.id;
-            const toast = document.createElement('div');
-            toast.className = 'toast-notification';
-            toast.id = toastId;
-            toast.innerHTML = `
-                <div class="toast-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
-                <div class="toast-content">
-                    <div class="toast-title">${notif.title}</div>
-                    <div class="toast-message">${notif.message}</div>
-                </div>
-                <button type="button" class="toast-close" aria-label="Close">&times;</button>
-            `;
-            container.appendChild(toast);
-            
-            // Add click handler for close button
-            const closeBtn = toast.querySelector('.toast-close');
-            closeBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                closeToast(toastId);
-            });
-            
-            // Auto remove after 10 seconds
-            setTimeout(() => {
-                closeToast(toastId);
-            }, 10000);
-        }
-        
-        function closeToast(toastId) {
-            const toast = document.getElementById(toastId);
-            if (toast) {
-                toast.style.animation = 'toastSlideOut 0.3s ease forwards';
-                setTimeout(() => {
-                    if (toast.parentElement) {
-                        toast.remove();
-                    }
-                }, 300);
-            }
-        }
+        // Toast functions removed.
         
         // Check for notifications every 30 seconds
         {% if current_user %}
