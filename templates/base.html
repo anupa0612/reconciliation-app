@@ -441,6 +441,27 @@
         let notificationsOpen = false;
         let lastNotificationCount = 0;
         let shownToasts = new Set();
+
+        // If a user closes an overdue popup, don't keep re-showing it every 30s.
+        // We track by rec_id (not notification id) because the backend may create
+        // a new notification record for the same overdue item.
+        const CLOSED_TOASTS_KEY = 'reconcilehub_closed_overdue_toasts';
+        let closedToastRecIds = new Set();
+        try {
+            const raw = localStorage.getItem(CLOSED_TOASTS_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(arr)) closedToastRecIds = new Set(arr.map(Number));
+        } catch (e) {
+            closedToastRecIds = new Set();
+        }
+
+        function persistClosedToasts() {
+            try {
+                localStorage.setItem(CLOSED_TOASTS_KEY, JSON.stringify(Array.from(closedToastRecIds)));
+            } catch (e) {
+                // ignore storage errors (private mode, quota, etc.)
+            }
+        }
         
         function toggleNotifications() {
             const dropdown = document.getElementById('notificationDropdown');
@@ -475,7 +496,11 @@
                     // Show toast for new notifications
                     if (data.count > lastNotificationCount) {
                         data.notifications.forEach(notif => {
-                            if (!shownToasts.has(notif.id) && notif.type === 'danger') {
+                            // Avoid spam: if user closed this overdue popup before, don't show again.
+                            const recIdNum = Number(notif.rec_id);
+                            const isClosed = Number.isFinite(recIdNum) && closedToastRecIds.has(recIdNum);
+
+                            if (!shownToasts.has(notif.id) && notif.type === 'danger' && !isClosed) {
                                 showToast(notif);
                                 shownToasts.add(notif.id);
                             }
@@ -589,10 +614,18 @@
             closeBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                // Remember that user closed this overdue popup
+                const recIdNum = Number(notif.rec_id);
+                if (Number.isFinite(recIdNum)) {
+                    closedToastRecIds.add(recIdNum);
+                    persistClosedToasts();
+                }
+
                 closeToast(toastId);
             });
             
-            // Auto remove after 10 seconds
+            // Auto remove after 10 seconds (does NOT mark as closed)
             setTimeout(() => {
                 closeToast(toastId);
             }, 10000);
@@ -601,6 +634,8 @@
         function closeToast(toastId) {
             const toast = document.getElementById(toastId);
             if (toast) {
+                // Prevent accidental double-click / stuck hover
+                toast.style.pointerEvents = 'none';
                 toast.style.animation = 'toastSlideOut 0.3s ease forwards';
                 setTimeout(() => {
                     if (toast.parentElement) {
