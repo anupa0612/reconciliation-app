@@ -122,6 +122,10 @@
             border-radius: 6px;
             color: rgba(255,255,255,0.8);
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            user-select: none;
         }
         .notification-bell:hover {
             background-color: var(--primary-color);
@@ -129,16 +133,22 @@
         }
         .notification-badge {
             position: absolute;
-            top: 5px;
-            right: 15px;
+            top: 8px;
+            right: 14px;
             background-color: var(--danger-color);
             color: white;
-            border-radius: 50%;
-            padding: 2px 6px;
+            border-radius: 999px;
+            padding: 0 7px;
             font-size: 0.65rem;
             font-weight: bold;
             min-width: 18px;
-            text-align: center;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            pointer-events: none; /* so clicks always reach the bell */
         }
         .notification-dropdown {
             position: fixed;
@@ -609,6 +619,16 @@
         document.addEventListener('DOMContentLoaded', function() {
             fetchNotifications();
             fetchOverdueCount();
+
+            // Fallback: allow dismissing Bootstrap alerts even if bootstrap JS
+            // doesn't hook up (or is blocked). This fixes the "X" not closing.
+            document.querySelectorAll('.alert .btn-close').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const alert = btn.closest('.alert');
+                    if (alert) alert.remove();
+                });
+            });
         });
         
         function fetchOverdueCount() {
