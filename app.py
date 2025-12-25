@@ -760,6 +760,92 @@ def resolve_overdue(id):
     
     return render_template('resolve_overdue.html', record=record, today=get_sl_today())
 
+
+@app.route('/overdue/resolve-bulk', methods=['POST'])
+@admin_required
+def bulk_resolve_overdue():
+    """Resolve multiple overdue records in one action (admin only)."""
+    current_user = get_current_user()
+    ids = request.form.getlist('overdue_ids')
+
+    if not ids:
+        flash('Please select at least one overdue item to resolve.', 'error')
+        return redirect(url_for('overdue_items'))
+
+    # Shared resolution fields
+    resolution_notes = (request.form.get('resolution_notes') or '').strip()
+    if not resolution_notes:
+        flash('Resolution notes are required to bulk resolve overdue items.', 'error')
+        return redirect(url_for('overdue_items'))
+
+    try:
+        items_reconciled = int(request.form.get('items_reconciled', 0))
+    except Exception:
+        items_reconciled = 0
+    try:
+        exceptions_found = int(request.form.get('exceptions_found', 0))
+    except Exception:
+        exceptions_found = 0
+
+    resolved_count = 0
+    now = datetime.utcnow()
+
+    for raw_id in ids:
+        try:
+            oid = int(raw_id)
+        except Exception:
+            continue
+
+        record = OverdueRecord.query.get(oid)
+        if not record or record.resolved:
+            continue
+
+        record.resolved = True
+        record.resolved_at = now
+        record.resolved_by = current_user.name if current_user else 'Unknown'
+        record.resolution_notes = resolution_notes
+        record.items_reconciled = items_reconciled
+        record.exceptions_found = exceptions_found
+
+        # Save to completion history as overdue completion
+        history = CompletionHistory(
+            reconciliation_id=record.reconciliation_id,
+            reconciliation_name=record.reconciliation_name,
+            frequency=record.frequency,
+            priority=record.priority,
+            source_system=record.source_system,
+            target_system=record.target_system,
+            assigned_to_name=record.assigned_to_name,
+            completed_by=current_user.name if current_user else 'Unknown',
+            due_date=record.due_date,
+            completed_at=now,
+            items_reconciled=items_reconciled,
+            exceptions_found=exceptions_found,
+            completion_notes=resolution_notes,
+            was_overdue=True,
+            days_overdue=(get_sl_today() - record.due_date).days if record.due_date else 0,
+        )
+        db.session.add(history)
+
+        # Reset the overdue_notified flag so future overdue can be detected
+        rec = Reconciliation.query.get(record.reconciliation_id)
+        if rec:
+            rec.overdue_notified = False
+
+        # Delete related danger notifications for this reconciliation
+        Notification.query.filter_by(rec_id=record.reconciliation_id, type='danger').delete()
+
+        resolved_count += 1
+
+    db.session.commit()
+
+    if resolved_count > 0:
+        flash(f'Resolved {resolved_count} overdue item(s).', 'success')
+    else:
+        flash('No overdue items were resolved (they may already be resolved).', 'error')
+
+    return redirect(url_for('overdue_items'))
+
 @app.route('/reconciliations/add', methods=['GET', 'POST'])
 @admin_required
 def add_reconciliation():
